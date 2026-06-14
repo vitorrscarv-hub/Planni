@@ -1012,21 +1012,6 @@ input[list]{background-image:none}
       </div>
     </div>
 
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-      <div style="flex:1;height:1px;background:var(--border)"></div>
-      <span style="font-size:10px;font-weight:700;color:var(--ink3)">OU PREENCHA MANUALMENTE</span>
-      <div style="flex:1;height:1px;background:var(--border)"></div>
-    </div>
-    <div class="form-group"><label>Título</label><input id="evt-title" type="text" placeholder="Nome do evento..."></div>
-    <div class="input-row">
-      <div><label>Data</label><input id="evt-date" type="date"></div>
-      <div><label>Horário</label><input id="evt-time" type="time"></div>
-    </div>
-    <div class="input-row">
-      <div><label>Lembrete</label><select id="evt-remind"><option value="0">Sem lembrete</option><option value="5">5 min</option><option value="10">10 min</option><option value="15" selected>15 min</option><option value="30">30 min</option><option value="60">1 hora</option></select></div>
-      <div><label>Cor</label><select id="evt-color"><option value="#2d7dd2">🔵 Azul</option><option value="#18a058">🟢 Verde</option><option value="#e0422d">🔴 Vermelho</option><option value="#e07d1a">🟠 Laranja</option><option value="#8b5cf6">🟣 Roxo</option></select></div>
-    </div>
-    <button class="btn" onclick="addEvent()">Adicionar Evento</button>
   </div>
   <div class="section-title" style="display:flex;align-items:center;justify-content:space-between">
     <span>Eventos</span>
@@ -1054,7 +1039,7 @@ input[list]{background-image:none}
     </div>
     <div id="cal-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px"></div>
     <!-- Day events panel -->
-    <div id="cal-day-panel" style="display:none;margin-top:12px">
+    <div id="cal-day-panel" style="display:none;margin-top:12px;padding-bottom:80px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div id="cal-day-title" style="font-size:14px;font-weight:900;color:var(--ink)"></div>
         <button onclick="calAddEventOnDay()" style="background:var(--sky);color:#fff;border:none;border-radius:20px;padding:5px 14px;font-size:11px;font-weight:700;cursor:pointer">+ Evento</button>
@@ -1064,7 +1049,7 @@ input[list]{background-image:none}
   </div>
 
   <!-- LIST VIEW -->
-  <div class="card" id="events-list"><div class="empty"><div class="empty-icon">📅</div>Nenhum evento</div></div>
+  <div class="card" id="events-list" style="padding-bottom:80px"><div class="empty"><div class="empty-icon">📅</div>Nenhum evento</div></div>
 </div>
 
 <!-- METAS -->
@@ -1649,10 +1634,6 @@ var firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 var db   = firebase.firestore();
-var auth = firebase.auth();
-</script>
-
-<script>
 // ═══════════════════════════════════════
 // CONSTANTS & STATE
 // ═══════════════════════════════════════
@@ -2852,18 +2833,41 @@ async function fetchAllQuotes(){ for(const inv of (state.investments||[]).filter
 // AGENDA / ALARM
 // ═══════════════════════════════════════
 function addEvent(){
-  const title=document.getElementById('evt-title').value.trim();
-  const date=document.getElementById('evt-date').value;
-  const time=document.getElementById('evt-time').value;
-  const remind=parseInt(document.getElementById('evt-remind').value);
-  const color=document.getElementById('evt-color').value;
-  if(!title||!date||!time){ toast('Preencha título, data e horário'); return; }
-  state.events.push({id:uid(),title,date,time,color,remind});
-  save(); renderEvents(); updateHome();
+  var title=document.getElementById('evt-title').value.trim();
+  var date=document.getElementById('evt-date').value;
+  var time=document.getElementById('evt-time').value;
+  var remind=parseInt((document.getElementById('evt-remind')||{value:0}).value)||0;
+  var color=(document.getElementById('evt-color')||{value:'#2d7dd2'}).value;
+  if(!title){ toast('Preencha o título'); return; }
+  if(!date){ toast('Preencha a data'); return; }
+  if(!time){ toast('Preencha o horário'); return; }
+  state.events.push({id:uid(),title:title,date:date,time:time,color:color,remind:remind});
+  save(); updateHome();
+  // Clear form
   document.getElementById('evt-title').value='';
-  toast('✓ Evento adicionado!');
+  // Refresh the correct view
+  if(_agendaView==='calendar'){
+    renderCalendar();
+    // If selected day matches, refresh day panel too
+    if(_calSelectedDay===date) calSelectDay(date);
+  } else {
+    renderEvents();
+  }
+  toast('\u2713 Evento adicionado!');
+  try{ syncEventsToGroup(); }catch(e){}
 }
 
+
+function calAddEventOnDay(){
+  // Open the quick event modal with the selected day pre-filled
+  if(_calSelectedDay){
+    openEventModal(_calSelectedDay);
+  } else {
+    // Scroll to the manual form
+    var form = document.getElementById('add-event-form');
+    if(form) form.scrollIntoView({behavior:'smooth', block:'start'});
+  }
+}
 function renderEvents(){
   // Also refresh calendar if it's active
   if(_agendaView === 'calendar'){ try{ renderCalendar(); }catch(e){} return; }
@@ -3533,10 +3537,9 @@ function renderCalendar(){
     if(c.date === _calSelectedDay) cls += ' selected';
     if(c.date && evMap[c.date] && evMap[c.date].length) cls += ' has-events';
     var dots = '';
-    if(c.date && evMap[c.date]){
-      dots = evMap[c.date].slice(0,2).map(function(e){
-        return '<div class="cal-event-dot" style="background:'+e.color+'"></div>';
-      }).join('');
+    if(c.date && evMap[c.date] && evMap[c.date].length){
+      // Single dot in the color of the first event
+      dots = '<div class="cal-event-dot" style="background:'+evMap[c.date][0].color+'"></div>';
     }
     var onclick = c.date ? 'calSelectDay(\''+c.date+'\')' : '';
     return '<div class="'+cls+'" onclick="'+onclick+'">'
@@ -4479,13 +4482,7 @@ function renderGroupBar(){
   }
 }
 
-// Override addEvent to sync to group
-var _addEventOrig = addEvent;
-function addEvent(){
-  _addEventOrig();
-  // Sync to group after adding
-  setTimeout(function(){ syncEventsToGroup(); }, 100);
-}
+// addEvent syncs to group internally
 
 // Override delEvent to sync removal
 var _delEventOrig = delEvent;
