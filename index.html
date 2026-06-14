@@ -1012,6 +1012,42 @@ input[list]{background-image:none}
       </div>
     </div>
 
+    <!-- MANUAL ENTRY DIVIDER -->
+    <div style="display:flex;align-items:center;gap:10px;margin:6px 0 14px">
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+      <span style="font-size:11px;font-weight:700;color:var(--ink3)">ou adicione manualmente</span>
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+    </div>
+
+    <!-- MANUAL EVENT FIELDS -->
+    <div class="form-group"><label>Título</label><input id="evt-title" class="form-input" type="text" placeholder="Nome do evento"></div>
+    <div style="display:flex;gap:10px">
+      <div class="form-group" style="flex:1"><label>Data</label><input id="evt-date" class="form-input" type="date"></div>
+      <div class="form-group" style="flex:1"><label>Horário</label><input id="evt-time" class="form-input" type="time"></div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="form-group" style="flex:1"><label>Lembrete</label>
+        <select id="evt-remind" class="form-input">
+          <option value="0">Sem lembrete</option>
+          <option value="5">5 min antes</option>
+          <option value="15" selected>15 min antes</option>
+          <option value="30">30 min antes</option>
+          <option value="60">1 hora antes</option>
+          <option value="1440">1 dia antes</option>
+        </select>
+      </div>
+      <div class="form-group" style="flex:1"><label>Cor</label>
+        <select id="evt-color" class="form-input">
+          <option value="#2d7dd2">🔵 Azul</option>
+          <option value="#18a058">🟢 Verde</option>
+          <option value="#e0422d">🔴 Vermelho</option>
+          <option value="#e07d1a">🟠 Laranja</option>
+          <option value="#8b5cf6">🟣 Roxo</option>
+        </select>
+      </div>
+    </div>
+    <button type="button" class="btn" style="margin-top:4px" onclick="addEvent()">+ Adicionar Evento</button>
+
   </div>
   <div class="section-title" style="display:flex;align-items:center;justify-content:space-between">
     <span>Eventos</span>
@@ -1634,6 +1670,7 @@ var firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 var db   = firebase.firestore();
+var auth = firebase.auth();
 // ═══════════════════════════════════════
 // CONSTANTS & STATE
 // ═══════════════════════════════════════
@@ -2833,9 +2870,14 @@ async function fetchAllQuotes(){ for(const inv of (state.investments||[]).filter
 // AGENDA / ALARM
 // ═══════════════════════════════════════
 function addEvent(){
-  var title=document.getElementById('evt-title').value.trim();
-  var date=document.getElementById('evt-date').value;
-  var time=document.getElementById('evt-time').value;
+ try{
+  var tEl=document.getElementById('evt-title');
+  var dEl=document.getElementById('evt-date');
+  var hEl=document.getElementById('evt-time');
+  if(!tEl||!dEl||!hEl){ toast('Erro: formulário não encontrado'); return; }
+  var title=tEl.value.trim();
+  var date=dEl.value;
+  var time=hEl.value;
   var remind=parseInt((document.getElementById('evt-remind')||{value:0}).value)||0;
   var color=(document.getElementById('evt-color')||{value:'#2d7dd2'}).value;
   if(!title){ toast('Preencha o título'); return; }
@@ -2843,18 +2885,16 @@ function addEvent(){
   if(!time){ toast('Preencha o horário'); return; }
   state.events.push({id:uid(),title:title,date:date,time:time,color:color,remind:remind});
   save(); updateHome();
-  // Clear form
-  document.getElementById('evt-title').value='';
-  // Refresh the correct view
+  tEl.value='';
   if(_agendaView==='calendar'){
     renderCalendar();
-    // If selected day matches, refresh day panel too
     if(_calSelectedDay===date) calSelectDay(date);
   } else {
     renderEvents();
   }
   toast('\u2713 Evento adicionado!');
   try{ syncEventsToGroup(); }catch(e){}
+ }catch(err){ toast('Erro ao adicionar: '+err.message); }
 }
 
 
