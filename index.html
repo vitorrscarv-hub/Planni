@@ -1339,6 +1339,14 @@ input[list]{background-image:none}
       <div style="font-size:10px;font-weight:800;color:var(--sky);letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px">Grupo Ativo</div>
       <div id="modal-group-name" style="font-size:16px;font-weight:900;color:var(--ink);margin-bottom:4px"></div>
       <div id="modal-group-code" style="font-size:12px;font-weight:700;color:var(--ink3);margin-bottom:10px"></div>
+      <div id="modal-group-pass-row" style="display:none;background:var(--white);border:1.5px dashed var(--sky);border-radius:12px;padding:10px 12px;margin-bottom:12px">
+        <div style="font-size:10px;font-weight:800;color:var(--sky);letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px">Senha do grupo</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <span id="modal-group-pass" style="font-size:15px;font-weight:900;color:var(--ink);letter-spacing:.05em"></span>
+          <button class="btn btn-ghost" style="font-size:11px;padding:6px 12px;width:auto;margin:0" onclick="copyGroupPass()">📋 Copiar senha</button>
+        </div>
+      </div>
+      <button class="btn" style="font-size:11px;padding:9px;margin-bottom:8px" onclick="copyGroupInvite()">📨 Copiar convite (código + senha)</button>
       <div id="modal-members-list" style="margin-bottom:12px"></div>
       <button class="btn btn-ghost" style="font-size:11px;padding:8px" onclick="leaveGroup()">Sair do grupo</button>
     </div>
@@ -1347,6 +1355,7 @@ input[list]{background-image:none}
     <div id="create-group-section">
       <div style="font-size:11px;font-weight:800;color:var(--ink3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Criar Novo Grupo</div>
       <div class="form-group"><label>Nome do grupo</label><input id="new-group-name" type="text" placeholder="Ex: Família Silva, Time Vendas..."></div>
+      <div class="form-group"><label>Senha do grupo</label><input id="new-group-pass" type="text" placeholder="Defina uma senha" autocomplete="off"></div>
       <button class="btn" onclick="createGroup()" style="margin-bottom:16px">Criar Grupo</button>
     </div>
 
@@ -1354,6 +1363,7 @@ input[list]{background-image:none}
     <div style="border-top:1.5px solid var(--border);padding-top:16px">
       <div style="font-size:11px;font-weight:800;color:var(--ink3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Entrar em um Grupo</div>
       <div class="form-group"><label>Código do grupo</label><input id="join-group-code" type="text" placeholder="Ex: FAM-4827" style="text-transform:uppercase;letter-spacing:.1em"></div>
+      <div class="form-group"><label>Senha do grupo</label><input id="join-group-pass" type="text" placeholder="Senha recebida do criador" autocomplete="off"></div>
       <button class="btn btn-green" onclick="joinGroup()" style="margin-bottom:16px">Entrar no Grupo</button>
     </div>
 
@@ -1606,6 +1616,13 @@ input[list]{background-image:none}
 <!-- NOTE EDITOR -->
 <div id="note-editor">
   <span id="note-editor-close" onclick="closeNoteEditor()">←</span>
+  <div style="position:absolute;top:14px;right:16px;display:flex;gap:6px;align-items:center">
+    <button onclick="noteListFormat('bullet')" title="Lista com marcadores" style="background:var(--white);border:1.5px solid var(--border);border-radius:10px;width:38px;height:34px;cursor:pointer;color:var(--ink2);font-size:16px;line-height:1">•≡</button>
+    <button onclick="noteListFormat('number')" title="Lista numerada" style="background:var(--white);border:1.5px solid var(--border);border-radius:10px;width:38px;height:34px;cursor:pointer;color:var(--ink2);font-size:13px;font-weight:800;line-height:1">1.≡</button>
+    <button onclick="copyNoteBody()" title="Copiar nota" style="background:var(--white);border:1.5px solid var(--border);border-radius:10px;width:38px;height:34px;cursor:pointer;color:var(--sky);display:inline-flex;align-items:center;justify-content:center">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+    </button>
+  </div>
   <input id="note-editor-title-field" placeholder="Título">
   <textarea id="note-editor-body-field" placeholder="Escreva..."></textarea>
   <button class="btn" onclick="saveNoteEdit()" style="margin-top:12px;flex-shrink:0">Salvar</button>
@@ -1682,7 +1699,7 @@ const SELIC_ATUAL = 0.1075; // 10.75% a.a.
 
 let state = {
   events:[],transactions:[],notes:[],tasks:[],bills:[],
-  investments:[],goals:[],customCats:[],
+  investments:[],goals:[],customCats:[],noteFolders:[],
   viewMonth: new Date().toISOString().slice(0,7)
 };
 let currentInvTab = 'fixa';
@@ -1706,7 +1723,7 @@ try{ localStorage.removeItem('claudio_v3'); }catch(e){}
 function _emptyState(){
   return {
     events:[], transactions:[], notes:[], tasks:[], bills:[],
-    investments:[], goals:[], customCats:[],
+    investments:[], goals:[], customCats:[], noteFolders:[],
     viewMonth:new Date().toISOString().slice(0,7)
   };
 }
@@ -1726,6 +1743,7 @@ function save(){
     investments: state.investments || [],
     goals:       state.goals       || [],
     customCats:  state.customCats  || [],
+    noteFolders: state.noteFolders || [],
     updatedAt:   firebase.firestore.FieldValue.serverTimestamp()
   }).catch(function(e){ console.warn('Firestore save error:', e); });
 }
@@ -1764,6 +1782,7 @@ function loadFromFirestore(){
         investments: d.investments ||[],
         goals:       d.goals       ||[],
         customCats:  d.customCats  ||[],
+        noteFolders: d.noteFolders ||[],
         viewMonth:   state.viewMonth
       });
     } else {
@@ -1801,6 +1820,7 @@ function startRealtimeSync(){
         investments: d.investments ||[],
         goals:       d.goals       ||[],
         customCats:  d.customCats  ||[],
+        noteFolders: d.noteFolders ||[],
         viewMonth:   state.viewMonth
       });
       try{ localStorage.setItem(_userStorageKey(),JSON.stringify(state)); }catch(e){}
@@ -2123,10 +2143,34 @@ function renderFinance(){
   const chartEl=document.getElementById('cat-chart');
   chartEl.innerHTML=sorted.length?sorted.map(([cat,val])=>{ const ci=getCatInfo(cat); return `<div class="bar-row"><div class="bar-label">${ci.icon} ${ci.label}</div><div class="bar-track"><div class="bar-fill" style="width:${(val/max*100).toFixed(0)}%;background:${ci.color}"></div></div><div class="bar-val">R$${fm(val)}</div></div>`; }).join(''):'<div class="empty" style="padding:16px 0">Sem despesas</div>';
 
-  // TX LIST
+  // TX LIST — grouped by day with daily balance
   const listEl=document.getElementById('tx-list');
   if(!txMonth.length){ listEl.innerHTML='<div class="empty"><div class="empty-icon">💳</div>Nenhuma movimentação neste mês</div>'; return; }
-  listEl.innerHTML=txMonth.slice(0,30).map(t=>{ const ci=getCatInfo(t.cat); return `<div class="tx-item"><div class="tx-icon" style="background:${ci.color}20">${ci.icon}</div><div class="tx-info"><div class="tx-name">${t.desc}${t.recur?'<span class="recur-badge">↻ MENSAL</span>':''}</div><div class="tx-cat">${ci.label} · ${fmtDate(t.date)}</div></div><div class="tx-amount ${t.type==='in'?'pos':'neg'}">${t.type==='in'?'+':'−'}R$${fm(t.val)}</div><span class="tx-del" onclick="delTx('${t.id}')">✕</span></div>`; }).join('');
+  // Sort newest first, then group by date
+  const sortedTx=txMonth.slice().sort(function(a,b){ return a.date<b.date?1:(a.date>b.date?-1:0); });
+  const byDay={};
+  const dayOrder=[];
+  sortedTx.forEach(function(t){
+    if(!byDay[t.date]){ byDay[t.date]=[]; dayOrder.push(t.date); }
+    byDay[t.date].push(t);
+  });
+  const weekdays=['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
+  let html='';
+  dayOrder.forEach(function(day){
+    const dayTx=byDay[day];
+    const dIn=dayTx.filter(function(t){return t.type==='in';}).reduce(function(s,t){return s+t.val;},0);
+    const dOut=dayTx.filter(function(t){return t.type==='out';}).reduce(function(s,t){return s+t.val;},0);
+    const dNet=dIn-dOut;
+    const dt=new Date(day+'T00:00:00');
+    const wd=weekdays[dt.getDay()];
+    const dayLabel=dt.getDate().toString().padStart(2,'0')+'/'+(dt.getMonth()+1).toString().padStart(2,'0');
+    html+='<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 4px 6px;border-bottom:1.5px solid var(--border);margin-top:4px">'
+      +'<div style="font-size:12px;font-weight:800;color:var(--ink)">'+dayLabel+' <span style="font-weight:600;color:var(--ink3);text-transform:capitalize">· '+wd+'</span></div>'
+      +'<div style="font-size:12px;font-weight:800;color:'+(dNet<0?'var(--red,#e0422d)':'var(--green,#18a058)')+'">'+(dNet<0?'−':'+')+'R$'+fm(Math.abs(dNet))+'</div>'
+      +'</div>';
+    html+=dayTx.map(function(t){ const ci=getCatInfo(t.cat); return '<div class="tx-item"><div class="tx-icon" style="background:'+ci.color+'20">'+ci.icon+'</div><div class="tx-info"><div class="tx-name">'+t.desc+(t.recur?'<span class="recur-badge">↻ MENSAL</span>':'')+'</div><div class="tx-cat">'+ci.label+'</div></div><div class="tx-amount '+(t.type==='in'?'pos':'neg')+'">'+(t.type==='in'?'+':'−')+'R$'+fm(t.val)+'</div><span class="tx-del" onclick="delTx(\''+t.id+'\')">✕</span></div>'; }).join('');
+  });
+  listEl.innerHTML=html;
 }
 
 function renderPieChart(txOuts){
@@ -3306,8 +3350,10 @@ var _currentFolder = null;
 var FOLDER_COLORS = ['#2d7dd2','#18a058','#e07d2d','#8b5cf6','#e0422d','#0ea5a5','#d4af37','#64748b'];
 
 function _ensureFolders(){
-  if(!state.noteFolders){
-    state.noteFolders = [{id:'default',name:'Geral',color:'#2d7dd2'}];
+  if(!Array.isArray(state.noteFolders)) state.noteFolders = [];
+  // Guarantee the default "Geral" folder exists, without removing others
+  if(!state.noteFolders.some(function(f){return f.id==='default';})){
+    state.noteFolders.unshift({id:'default',name:'Geral',color:'#2d7dd2'});
   }
   // Migrate old notes without folder
   (state.notes||[]).forEach(function(n){
@@ -3390,7 +3436,12 @@ function renderNotes(){
       return '<div class="note-item" data-nid="'+n.id+'" onclick="openNote(this.dataset.nid)">'
         +'<div class="note-head">'
         +'<div class="note-title-disp">'+n.title+'</div>'
+        +'<div style="display:flex;align-items:center;gap:10px">'
+        +'<span class="note-copy" data-nid="'+n.id+'" onclick="event.stopPropagation();copyNoteById(this.dataset.nid)" title="Copiar" style="cursor:pointer;color:var(--sky);display:inline-flex">'
+        +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'
+        +'</span>'
         +'<span class="note-del" data-nid="'+n.id+'" onclick="event.stopPropagation();delNote(this.dataset.nid)">\u2715</span>'
+        +'</div>'
         +'</div>'
         +(preview?'<div class="note-preview">'+preview+'</div>':'')
         +'<div class="note-date">'+new Date(n.date).toLocaleDateString('pt-BR')+'</div>'
@@ -3424,6 +3475,43 @@ function openNote(id){ const n=state.notes.find(n=>n.id===id); if(!n) return; ed
 function closeNoteEditor(){ document.getElementById('note-editor').classList.remove('show'); editingNoteId=null; }
 function saveNoteEdit(){ const n=state.notes.find(n=>n.id===editingNoteId); if(!n) return; n.title=document.getElementById('note-editor-title-field').value||'Sem título'; n.body=document.getElementById('note-editor-body-field').value; n.date=new Date().toISOString(); save(); renderNotes(); closeNoteEditor(); toast('✓ Atualizada!'); }
 function delNote(id){ state.notes=state.notes.filter(n=>n.id!==id); save(); renderNotes(); toast('Nota removida'); }
+
+function copyNoteBody(){
+  var t=document.getElementById('note-editor-title-field');
+  var b=document.getElementById('note-editor-body-field');
+  if(!b) return;
+  var txt=((t&&t.value)?t.value+'\n\n':'')+(b.value||'');
+  _copyText(txt.trim(), '✓ Nota copiada!');
+}
+// Copy a note directly from the list (by id)
+function copyNoteById(id){
+  var n=(state.notes||[]).find(function(x){return x.id===id;});
+  if(!n) return;
+  var txt=((n.title?n.title+'\n\n':'')+(n.body||'')).trim();
+  _copyText(txt, '✓ Nota copiada!');
+}
+// Apply bullet/number prefixes to selected lines in the editor textarea
+function noteListFormat(kind){
+  var ta=document.getElementById('note-editor-body-field');
+  if(!ta) return;
+  var start=ta.selectionStart, end=ta.selectionEnd;
+  var val=ta.value;
+  // Expand selection to full lines
+  var lineStart=val.lastIndexOf('\n',start-1)+1;
+  var lineEnd=val.indexOf('\n',end); if(lineEnd===-1) lineEnd=val.length;
+  var block=val.slice(lineStart,lineEnd);
+  var lines=block.split('\n');
+  var num=1;
+  var formatted=lines.map(function(ln){
+    var clean=ln.replace(/^\s*([•\-]|\d+\.)\s+/,''); // strip existing prefix
+    if(clean.trim()==='') return clean;
+    if(kind==='bullet') return '• '+clean;
+    return (num++)+'. '+clean;
+  }).join('\n');
+  ta.value=val.slice(0,lineStart)+formatted+val.slice(lineEnd);
+  ta.focus();
+  ta.setSelectionRange(lineStart, lineStart+formatted.length);
+}
 
 // ═══════════════════════════════════════
 // TASKS
@@ -4376,7 +4464,13 @@ function renderGroupModal(){
       var cd=document.getElementById('modal-group-code');
       var ml=document.getElementById('modal-members-list');
       if(nm) nm.textContent = data.name;
-      if(cd) cd.textContent = 'Código: '+data.id+' · Compartilhe com os membros';
+      if(cd) cd.textContent = 'Código: '+data.id;
+      var pr=document.getElementById('modal-group-pass-row');
+      var pv=document.getElementById('modal-group-pass');
+      if(pr&&pv){
+        if(data.pass){ pr.style.display='block'; pv.textContent=data.pass; }
+        else { pr.style.display='none'; }
+      }
       if(ml){
         ml.innerHTML = (data.members||[]).map(function(m){
           return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(0,0,0,.06)">'
@@ -4406,12 +4500,15 @@ function renderGroupModal(){
 
 function createGroup(){
   var name = (document.getElementById('new-group-name')||{value:''}).value.trim();
+  var pass = (document.getElementById('new-group-pass')||{value:''}).value.trim();
   if(!name){ toast('Digite o nome do grupo'); return; }
+  if(!pass){ toast('Defina uma senha para o grupo'); return; }
   var user = currentUser || {name:'Usuário',email:'local@app'};
   var groupId = generateGroupCode();
   var group = {
     id: groupId,
     name: name,
+    pass: pass,
     createdAt: today(),
     members: [{name:user.name, email:user.email, isAdmin:true, joinedAt:today()}],
     events: []
@@ -4420,31 +4517,34 @@ function createGroup(){
   saveCurrentGroup({id:groupId, name:name});
   // Sync current events to group
   syncEventsToGroup();
-  toast('✓ Grupo "'+name+'" criado! Código: '+groupId);
+  toast('✓ Grupo "'+name+'" criado!');
   renderGroupModal();
   renderGroupBar();
 }
 
 function joinGroup(){
   var code = ((document.getElementById('join-group-code')||{value:''}).value||'').trim().toUpperCase();
+  var pass = ((document.getElementById('join-group-pass')||{value:''}).value||'').trim();
   if(!code){ toast('Digite o código do grupo'); return; }
-  var data = _groupDB.load(code);
-  if(!data){ toast('Grupo não encontrado. Verifique o código.'); return; }
-  var user = currentUser || {name:'Usuário',email:'local@app'};
-  // Check if already member
-  var already = (data.members||[]).some(function(m){ return m.email===user.email; });
-  if(!already){
-    data.members.push({name:user.name, email:user.email, isAdmin:false, joinedAt:today()});
-    _groupDB.save(code, data);
-  }
-  saveCurrentGroup({id:code, name:data.name});
-  // Merge group events into local state
-  mergeGroupEvents(data.events||[]);
-  toast('✓ Você entrou em "'+data.name+'"!');
-  renderGroupModal();
-  renderGroupBar();
-  renderEvents();
-  updateHome();
+  if(!pass){ toast('Digite a senha do grupo'); return; }
+  // Fetch fresh from cloud so the password check is reliable
+  _groupDB.loadAsync(code, function(data){
+    if(!data){ toast('Grupo não encontrado. Verifique o código.'); return; }
+    if((data.pass||'') !== pass){ toast('Senha incorreta.'); return; }
+    var user = currentUser || {name:'Usuário',email:'local@app'};
+    var already = (data.members||[]).some(function(m){ return m.email===user.email; });
+    if(!already){
+      data.members.push({name:user.name, email:user.email, isAdmin:false, joinedAt:today()});
+      _groupDB.save(code, data);
+    }
+    saveCurrentGroup({id:code, name:data.name});
+    mergeGroupEvents(data.events||[]);
+    toast('✓ Você entrou em "'+data.name+'"!');
+    renderGroupModal();
+    renderGroupBar();
+    renderEvents();
+    updateHome();
+  });
 }
 
 function leaveGroup(){
@@ -4523,6 +4623,36 @@ function renderGroupBar(){
 }
 
 // addEvent syncs to group internally
+
+function _copyText(txt, okMsg){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(function(){ toast(okMsg); })
+      .catch(function(){ _copyFallback(txt, okMsg); });
+  } else { _copyFallback(txt, okMsg); }
+}
+function _copyFallback(txt, okMsg){
+  try{
+    var ta=document.createElement('textarea');
+    ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    toast(okMsg);
+  }catch(e){ toast('Não foi possível copiar'); }
+}
+function copyGroupPass(){
+  var group=getCurrentGroup(); if(!group) return;
+  var data=_groupDB.load(group.id); if(!data||!data.pass) return;
+  _copyText(data.pass, '✓ Senha copiada!');
+}
+function copyGroupInvite(){
+  var group=getCurrentGroup(); if(!group) return;
+  var data=_groupDB.load(group.id); if(!data) return;
+  var msg='📅 Entre na minha agenda no Planni!\n\nGrupo: '+data.name
+    +'\nCódigo: '+data.id
+    +(data.pass?('\nSenha: '+data.pass):'')
+    +'\n\nApp: https://planni.pages.dev';
+  _copyText(msg, '✓ Convite copiado!');
+}
 
 // Override delEvent to sync removal
 var _delEventOrig = delEvent;
@@ -5185,10 +5315,14 @@ function resetInactivity(){
 // ═══════════════════════════════════════════════════════
 // showScreen - see unified version above
 function navTo(name){
-  // Tab order matches HTML: home(0) finance(1) bills(2) goals(3) notes(4) tasks(5) reports(6) dashboard(7) invest(8) agenda(9) ai(10)
-  var tabMap={home:0,finance:1,bills:2,goals:3,notes:4,tasks:5,reports:6,dashboard:7,invest:8,agenda:9,ai:10};
+  // Find the tab whose onclick targets this screen (robust to tab order changes).
+  // Screens like 'bills'/'dashboard' may have no tab — showScreen still handles them.
   var tabs=document.querySelectorAll('.tab');
-  var tabEl=tabs[tabMap[name]];
+  var tabEl=null;
+  tabs.forEach(function(t){
+    var oc=t.getAttribute('onclick')||'';
+    if(oc.indexOf("showScreen('"+name+"'")!==-1) tabEl=t;
+  });
   showScreen(name,tabEl);
   if(tabEl) tabEl.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
 }
