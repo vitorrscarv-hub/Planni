@@ -240,6 +240,10 @@ label{font-size:11px;font-weight:700;color:var(--ink3);letter-spacing:.08em;text
 .task-prio.alta{background:#ffe4e0;color:var(--red)}
 .task-prio.media{background:#fff3dc;color:var(--orange)}
 .task-prio.baixa{background:var(--sky-xl);color:var(--sky)}
+.task-prio.q1{background:#fdecec;color:#c0392b}
+.task-prio.q2{background:#e7f6ec;color:#157a45}
+.task-prio.q3{background:#fff3e0;color:#b9701a}
+.task-prio.q4{background:#eef1f6;color:#5b6b82}
 .task-del{color:var(--ink4);cursor:pointer;font-size:14px;padding:4px}
 .task-del:active{color:var(--red)}
 /* VOICE BTN */
@@ -607,6 +611,21 @@ input[list]{background-image:none}
 .usage-bar-label{font-size:10px;font-weight:700;color:var(--ink3);display:flex;justify-content:space-between;margin-bottom:4px}
 .usage-bar{height:4px;background:var(--sky-xl);border-radius:2px;overflow:hidden}
 .usage-bar-fill{height:100%;background:var(--sky);border-radius:2px;transition:width .4s}
+.seg-toggle{display:flex;gap:0;border:1.5px solid var(--border);border-radius:12px;overflow:hidden}
+.seg-toggle button{flex:1;border:none;background:var(--white);color:var(--ink3);font-family:inherit;font-size:12px;font-weight:700;padding:9px 4px;cursor:pointer;transition:all .15s}
+.seg-toggle button.seg-on{background:var(--sky);color:#fff}
+.eisen-quad{border-radius:var(--r2);padding:14px;margin-bottom:12px;border:1.5px solid var(--border)}
+.eisen-quad-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.eisen-quad-title{font-size:13px;font-weight:900;letter-spacing:.02em}
+.eisen-quad-sub{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;opacity:.7}
+.eisen-quad-count{font-size:11px;font-weight:800;background:rgba(255,255,255,.6);border-radius:20px;padding:2px 9px}
+.eisen-task{display:flex;align-items:center;gap:10px;background:var(--white);border-radius:12px;padding:10px 12px;margin-bottom:7px}
+.eisen-task:last-child{margin-bottom:0}
+.eisen-empty{font-size:12px;color:var(--ink3);text-align:center;padding:10px 0;font-style:italic}
+.q1{background:#fdecec;border-color:#f3c4c4}
+.q2{background:#e7f6ec;border-color:#bfe6cd}
+.q3{background:#fff3e0;border-color:#f6dcb0}
+.q4{background:#eef1f6;border-color:#d6dde8}
 </style>
 </head>
 <body>
@@ -1230,14 +1249,33 @@ input[list]{background-image:none}
 <div id="screen-tasks" class="screen">
   <div class="card">
     <div class="card-title blue">Nova Tarefa</div>
-    <div class="input-row" style="margin-bottom:10px">
+    <div class="form-group" style="margin-bottom:10px">
       <input id="task-input" type="text" placeholder="O que precisa ser feito?">
-      <select id="task-prio" style="max-width:110px"><option value="media">Média</option><option value="alta">Alta</option><option value="baixa">Baixa</option></select>
     </div>
-    <button class="btn" onclick="addTask()">Adicionar</button>
+    <div style="display:flex;gap:10px;margin-bottom:12px">
+      <div style="flex:1">
+        <div style="font-size:11px;font-weight:800;color:var(--ink3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">Importância</div>
+        <div class="seg-toggle" id="seg-importante">
+          <button type="button" class="seg-on" data-v="1" onclick="segPick('importante',1,this)">Importante</button>
+          <button type="button" data-v="0" onclick="segPick('importante',0,this)">Não imp.</button>
+        </div>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:11px;font-weight:800;color:var(--ink3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">Urgência</div>
+        <div class="seg-toggle" id="seg-urgente">
+          <button type="button" class="seg-on" data-v="1" onclick="segPick('urgente',1,this)">Urgente</button>
+          <button type="button" data-v="0" onclick="segPick('urgente',0,this)">Não urg.</button>
+        </div>
+      </div>
+    </div>
+    <button class="btn" onclick="addTask()">Adicionar à Matriz</button>
   </div>
-  <div class="section-title">Lista de Tarefas</div>
-  <div class="card" id="tasks-list"><div class="empty"><div class="empty-icon">✓</div>Nenhuma tarefa</div></div>
+
+  <div class="section-title" style="display:flex;align-items:center;justify-content:space-between">
+    <span>Matriz de Prioridades</span>
+    <span style="font-size:10px;font-weight:700;color:var(--ink3)">Eisenhower</span>
+  </div>
+  <div id="eisenhower-grid"></div>
 </div>
 
 <!-- IA FINANCEIRA -->
@@ -2001,7 +2039,7 @@ function updateHome(){
 
   // Tasks list
   const tEl=document.getElementById('h-tasks-list');
-  tEl.innerHTML=pendTasks.length?pendTasks.slice(0,4).map(t=>`<div class="task-item"><div class="task-check" onclick="quickDoneTask('${t.id}')"></div><div class="task-text">${t.text}</div><span class="task-prio ${t.prio}">${t.prio}</span></div>`).join(''):'<div class="empty"><div class="empty-icon">✅</div>Tudo em dia!</div>';
+  tEl.innerHTML=pendTasks.length?pendTasks.slice(0,4).map(t=>{var q=_taskQuadrant(t);var ql={q1:'FAZER',q2:'AGENDAR',q3:'DELEGAR',q4:'ELIMINAR'}[q];return `<div class="task-item"><div class="task-check" onclick="quickDoneTask('${t.id}')"></div><div class="task-text">${t.text}</div><span class="task-prio ${q}">${ql}</span></div>`;}).join(''):'<div class="empty"><div class="empty-icon">✅</div>Tudo em dia!</div>';
 }
 
 function quickDoneTask(id){
@@ -3516,14 +3554,68 @@ function noteListFormat(kind){
 // ═══════════════════════════════════════
 // TASKS
 // ═══════════════════════════════════════
-function addTask(){ const text=document.getElementById('task-input').value.trim(); const prio=document.getElementById('task-prio').value; if(!text){ toast('Digite a tarefa'); return; } state.tasks.unshift({id:uid(),text,prio,done:false}); save(); renderTasks(); updateHome(); document.getElementById('task-input').value=''; toast('✓ Tarefa adicionada!'); }
+// Eisenhower selection state (defaults: important + urgent)
+var _taskSel = { importante:1, urgente:1 };
+function segPick(group, val, btn){
+  _taskSel[group]=val;
+  var wrap=document.getElementById('seg-'+group);
+  if(wrap){ wrap.querySelectorAll('button').forEach(function(b){ b.classList.remove('seg-on'); }); }
+  btn.classList.add('seg-on');
+}
+function addTask(){
+  const text=document.getElementById('task-input').value.trim();
+  if(!text){ toast('Digite a tarefa'); return; }
+  state.tasks.unshift({
+    id:uid(), text:text, done:false,
+    importante:_taskSel.importante, urgente:_taskSel.urgente
+  });
+  save(); renderTasks(); updateHome();
+  document.getElementById('task-input').value='';
+  toast('✓ Tarefa adicionada!');
+}
 function toggleTask(id){ const t=state.tasks.find(t=>t.id===id); if(t){ t.done=!t.done; save(); renderTasks(); updateHome(); } }
 function delTask(id){ state.tasks=state.tasks.filter(t=>t.id!==id); save(); renderTasks(); updateHome(); toast('Tarefa removida'); }
+
+// Map a task to one of the 4 quadrants (with migration for old tasks)
+function _taskQuadrant(t){
+  var imp = (t.importante!==undefined) ? t.importante : 1;
+  var urg = (t.urgente!==undefined) ? t.urgente : 1;
+  if(imp && urg) return 'q1';
+  if(imp && !urg) return 'q2';
+  if(!imp && urg) return 'q3';
+  return 'q4';
+}
 function renderTasks(){
-  const el=document.getElementById('tasks-list');
-  if(!state.tasks.length){ el.innerHTML='<div class="empty"><div class="empty-icon">✓</div>Nenhuma tarefa</div>'; return; }
-  const s=[...state.tasks].sort((a,b)=>{ if(a.done!==b.done) return a.done?1:-1; return {alta:0,media:1,baixa:2}[a.prio]-{alta:0,media:1,baixa:2}[b.prio]; });
-  el.innerHTML=s.map(t=>`<div class="task-item"><div class="task-check ${t.done?'done':''}" onclick="toggleTask('${t.id}')">${t.done?'✓':''}</div><div class="task-text ${t.done?'done':''}">${t.text}</div><span class="task-prio ${t.prio}">${t.prio}</span><span class="task-del" onclick="delTask('${t.id}')">✕</span></div>`).join('');
+  const el=document.getElementById('eisenhower-grid');
+  if(!el) return;
+  const quads={
+    q1:{title:'Fazer Agora', sub:'Importante · Urgente', cls:'q1', items:[]},
+    q2:{title:'Agendar',     sub:'Importante · Não urgente', cls:'q2', items:[]},
+    q3:{title:'Delegar',     sub:'Não importante · Urgente', cls:'q3', items:[]},
+    q4:{title:'Eliminar',    sub:'Não importante · Não urgente', cls:'q4', items:[]}
+  };
+  (state.tasks||[]).forEach(function(t){ quads[_taskQuadrant(t)].items.push(t); });
+  let html='';
+  ['q1','q2','q3','q4'].forEach(function(key){
+    const q=quads[key];
+    // pending first, done last
+    const sorted=q.items.slice().sort(function(a,b){ return (a.done?1:0)-(b.done?1:0); });
+    let inner='';
+    if(!sorted.length){ inner='<div class="eisen-empty">Vazio</div>'; }
+    else { inner=sorted.map(function(t){
+      return '<div class="eisen-task">'
+        +'<div class="task-check '+(t.done?'done':'')+'" onclick="toggleTask(\''+t.id+'\')">'+(t.done?'✓':'')+'</div>'
+        +'<div class="task-text '+(t.done?'done':'')+'" style="flex:1">'+t.text+'</div>'
+        +'<span class="task-del" onclick="delTask(\''+t.id+'\')">✕</span>'
+        +'</div>';
+    }).join(''); }
+    html+='<div class="eisen-quad '+q.cls+'">'
+      +'<div class="eisen-quad-head">'
+        +'<div><div class="eisen-quad-title">'+q.title+'</div><div class="eisen-quad-sub">'+q.sub+'</div></div>'
+        +'<div class="eisen-quad-count">'+q.items.length+'</div>'
+      +'</div>'+inner+'</div>';
+  });
+  el.innerHTML=html;
 }
 
 // ═══════════════════════════════════════
@@ -3540,7 +3632,7 @@ function processVoice(cmd){
   const evtM=cmd.match(/(.+?)\s+(?:amanhã|hoje)\s*(?:às?|as)\s*(\d{1,2})(?::(\d{2}))?/);
   if(evtM){ const title=evtM[1].trim(); const hh=evtM[2].padStart(2,'0'); const mm=(evtM[3]||'00').padStart(2,'0'); const d=new Date(); if(cmd.includes('amanhã')) d.setDate(d.getDate()+1); state.events.push({id:uid(),title,date:d.toISOString().slice(0,10),time:`${hh}:${mm}`,color:'#2d7dd2',remind:15}); save(); renderEvents(); updateHome(); res.textContent=`✓ Evento "${title}" às ${hh}:${mm}`; setTimeout(closeVoice,2000); return; }
   const tarM=cmd.match(/(?:tarefa|lembrar de?|fazer|preciso|anotar tarefa)\s+(.+)/);
-  if(tarM){ const text=tarM[1].trim(); state.tasks.unshift({id:uid(),text,prio:'media',done:false}); save(); renderTasks(); updateHome(); res.textContent=`✓ Tarefa: "${text}"`; setTimeout(closeVoice,2000); return; }
+  if(tarM){ const text=tarM[1].trim(); state.tasks.unshift({id:uid(),text,done:false,importante:1,urgente:0}); save(); renderTasks(); updateHome(); res.textContent=`✓ Tarefa: "${text}"`; setTimeout(closeVoice,2000); return; }
   const notaM=cmd.match(/(?:anotar|nota)\s+(.+)/);
   if(notaM){ state.notes.unshift({id:uid(),title:'Nota de voz',body:notaM[1].trim(),date:new Date().toISOString()}); save(); renderNotes(); res.textContent='✓ Nota salva'; setTimeout(closeVoice,2000); return; }
   const metaM=cmd.match(/(?:meta|objetivo)\s+(.+?)\s+(?:de?|r\$)?\s*(\d+(?:[,.]\d{1,2})?)/);
@@ -4059,7 +4151,7 @@ function processVoice(cmd){
   if(evtM){var et=( evtM[1]||'Evento').trim()||'Evento';var hh=evtM[2].padStart(2,'0');var mm=(evtM[3]||'00').padStart(2,'0');var d=new Date();if(cmd.includes('amanhã')) d.setDate(d.getDate()+1);state.events.push({id:uid(),title:et,date:d.toISOString().slice(0,10),time:hh+':'+mm,color:'#2d7dd2',remind:15});save();renderEvents();updateHome();setRes('✓ "'+et+'" às '+hh+':'+mm);stopRecording();setTimeout(closeVoice,2000);return;}
   // TAREFAS
   var tarM=cmd.match(/(?:tarefa|lembrar de?|fazer|preciso|anotar tarefa)\s+(.+)/);
-  if(tarM){var txt=tarM[1].trim();state.tasks.unshift({id:uid(),text:txt,prio:'media',done:false});save();renderTasks();updateHome();setRes('✓ Tarefa: "'+txt+'"');stopRecording();setTimeout(closeVoice,2000);return;}
+  if(tarM){var txt=tarM[1].trim();state.tasks.unshift({id:uid(),text:txt,done:false,importante:1,urgente:0});save();renderTasks();updateHome();setRes('✓ Tarefa: "'+txt+'"');stopRecording();setTimeout(closeVoice,2000);return;}
   // NOTAS
   var notaM=cmd.match(/(?:anotar|nota|escrever|registrar)\s+(.+)/);
   if(notaM){state.notes.unshift({id:uid(),title:'Nota de voz',body:notaM[1].trim(),date:new Date().toISOString()});save();renderNotes();setRes('✓ Nota salva');stopRecording();setTimeout(closeVoice,2000);return;}
@@ -4195,30 +4287,10 @@ async function analyzeImageWithAI(){
   if(results) results.style.display = 'none';
 
   try{
-    var response = await fetch('https://api.anthropic.com/v1/messages', {
+    var response = await fetch('/api/analisar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: 'image/jpeg',
-                data: _cameraImageBase64
-              }
-            },
-            {
-              type: 'text',
-              text: 'Analise esta imagem de uma agenda ou caderno. Extraia TODOS os itens escritos e classifique cada um. Responda SOMENTE com JSON válido, sem texto antes ou depois, sem markdown. Formato exato:\n{"items":[{"texto":"texto do item","tipo":"agenda|tarefa|compra|financas","data":"YYYY-MM-DD ou null","hora":"HH:MM ou null","valor":"valor em reais ou null"}]}\nRegras: tipo "agenda" para compromissos com horário. tipo "tarefa" para afazeres sem horário fixo. tipo "compra" para itens de lista de compras. tipo "financas" para pagamentos, valores, contas.'
-            }
-          ]
-        }]
-      })
+      body: JSON.stringify({ image: _cameraImageBase64 })
     });
 
     if(!response.ok){
@@ -4226,12 +4298,8 @@ async function analyzeImageWithAI(){
     }
 
     var data = await response.json();
-    var text = (data.content||[]).map(function(c){ return c.text||''; }).join('');
-
-    // Parse JSON safely
-    var clean = text.replace(/```json|```/g,'').trim();
-    var parsed = JSON.parse(clean);
-    _aiExtractedItems = parsed.items || [];
+    if(data.error){ throw new Error(data.error); }
+    _aiExtractedItems = data.items || [];
 
     incrementCameraUsage();
     renderCameraUsage();
@@ -4239,7 +4307,6 @@ async function analyzeImageWithAI(){
 
   } catch(err){
     console.error('Camera AI error:', err);
-    // Fallback: show manual entry prompt
     toast('Não foi possível analisar a imagem. Tente com melhor iluminação.');
     clearCameraCapture();
   } finally {
@@ -4317,7 +4384,7 @@ function importSelectedAIItems(){
     } else if(item.tipo === 'tarefa'){
       state.tasks.push({
         id:uid(), text:item.texto, done:false,
-        priority:'medium', date:today(), fromCamera:true
+        importante:1, urgente:0, date:today(), fromCamera:true
       });
       imported.tarefa++;
 
@@ -4325,7 +4392,7 @@ function importSelectedAIItems(){
       // Add to notes as shopping list item
       state.tasks.push({
         id:uid(), text:'🛒 '+item.texto, done:false,
-        priority:'low', date:today(), fromCamera:true
+        importante:0, urgente:0, date:today(), fromCamera:true
       });
       imported.compra++;
 
