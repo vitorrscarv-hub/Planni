@@ -652,8 +652,18 @@ input[list]{background-image:none}
 .ai-chat-inputbar{display:flex;gap:8px;padding:12px;border-top:1.5px solid var(--border);background:var(--white);flex-shrink:0}
 .ai-chat-inputbar input{flex:1;border:1.5px solid var(--border);border-radius:100px;padding:12px 16px;font-family:inherit;font-size:15px;background:var(--bg);color:var(--ink);outline:none}
 .ai-chat-inputbar input:focus{border-color:var(--sky)}
-#ai-chat-send{background:linear-gradient(135deg,#667eea,#764ba2);border:none;border-radius:50%;width:46px;height:46px;flex-shrink:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:#fff}
+#ai-chat-send{background:linear-gradient(135deg,#667eea,#764ba2);border:none;border-radius:50%;width:46px;height:46px;flex-shrink:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:#fff;transition:background .2s}
 #ai-chat-send:active{transform:scale(.93)}
+#ai-chat-send.recording{background:linear-gradient(135deg,#e0422d,#c0392b);animation:chatMicPulse 1.2s ease-in-out infinite}
+@keyframes chatMicPulse{0%,100%{box-shadow:0 0 0 0 rgba(224,66,45,.5)}50%{box-shadow:0 0 0 10px rgba(224,66,45,0)}}
+.ai-chat-listening{display:none;align-items:center;gap:8px;padding:6px 16px;background:#fde8e6;color:#b02010;font-size:12px;font-weight:700}
+.ai-chat-listening.show{display:flex}
+.ai-chat-listening .lwave{display:inline-flex;gap:3px;align-items:center}
+.ai-chat-listening .lwave span{width:3px;height:12px;background:#e0422d;border-radius:2px;animation:lwaveAnim .8s ease-in-out infinite}
+.ai-chat-listening .lwave span:nth-child(2){animation-delay:.15s}
+.ai-chat-listening .lwave span:nth-child(3){animation-delay:.3s}
+.ai-chat-listening .lwave span:nth-child(4){animation-delay:.45s}
+@keyframes lwaveAnim{0%,100%{transform:scaleY(.4)}50%{transform:scaleY(1)}}
 .ai-bubble{max-width:82%;padding:11px 14px;border-radius:16px;font-size:14px;font-weight:500;line-height:1.5;word-wrap:break-word}
 .ai-bubble.ai-bot{align-self:flex-start;background:var(--white);color:var(--ink);border:1.5px solid var(--border);border-bottom-left-radius:5px}
 .ai-bubble.ai-user{align-self:flex-end;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-bottom-right-radius:5px}
@@ -1589,10 +1599,17 @@ input[list]{background-image:none}
     <div id="ai-chat-messages">
       <div class="ai-bubble ai-bot">Oi! Sou seu assistente. Posso analisar seus dados e criar eventos, tarefas, notas e transações. Experimente: <i>"quanto gastei esse mês?"</i> ou <i>"crie uma tarefa importante de pagar o aluguel"</i>.</div>
     </div>
+    <div class="ai-chat-listening" id="ai-chat-listening">
+      <span class="lwave"><span></span><span></span><span></span><span></span></span>
+      Ouvindo... toque no microfone para parar
+    </div>
     <div class="ai-chat-inputbar">
-      <input id="ai-chat-input" type="text" placeholder="Pergunte ou peça algo..." onkeydown="if(event.key==='Enter')aiChatSend()">
-      <button onclick="aiChatSend()" id="ai-chat-send" aria-label="Enviar">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      <input id="ai-chat-input" type="text" placeholder="Pergunte ou peça algo..." oninput="_updateChatBtn()" onkeydown="if(event.key==='Enter')aiChatSend()">
+      <button id="ai-chat-send" aria-label="Enviar ou gravar" onclick="_chatBtnTap()">
+        <!-- Ícone microfone (campo vazio) -->
+        <svg id="ai-btn-mic" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+        <!-- Ícone enviar (campo com texto) -->
+        <svg id="ai-btn-send" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
       </button>
     </div>
   </div>
@@ -3931,9 +3948,11 @@ function calNextMonth(){
 function openAIChat(){
   var sheet=document.getElementById('ai-chat-sheet');
   if(sheet){ sheet.classList.add('show'); }
+  try{ _updateChatBtn(); }catch(e){}
   setTimeout(function(){ var i=document.getElementById('ai-chat-input'); if(i) i.focus(); },250);
 }
 function closeAIChat(){
+  try{ if(_chatRecording) _stopChatVoice(); }catch(e){}
   var sheet=document.getElementById('ai-chat-sheet');
   if(sheet) sheet.classList.remove('show');
 }
@@ -5849,12 +5868,84 @@ function _aiBuildContext(){
   };
 }
 
+// ── Botão do chat: microfone (vazio) ↔ enviar (com texto), estilo WhatsApp ──
+function _updateChatBtn(){
+  var input=document.getElementById('ai-chat-input');
+  var micIcon=document.getElementById('ai-btn-mic');
+  var sendIcon=document.getElementById('ai-btn-send');
+  if(!input||!micIcon||!sendIcon) return;
+  var hasText=input.value.trim().length>0;
+  // Durante a gravação, o botão mostra o microfone (vermelho), não a seta
+  if(_chatRecording){ micIcon.style.display='block'; sendIcon.style.display='none'; return; }
+  micIcon.style.display=hasText?'none':'block';
+  sendIcon.style.display=hasText?'block':'none';
+}
+
+// Toque no botão: se tem texto → envia; se vazio → grava/para
+function _chatBtnTap(){
+  var input=document.getElementById('ai-chat-input');
+  var hasText=input && input.value.trim().length>0;
+  if(_chatRecording){ _stopChatVoice(); return; }
+  if(hasText){ aiChatSend(); }
+  else { _startChatVoice(); }
+}
+
+// ── Reconhecimento de voz dedicado ao chat ──
+var _chatRecognition=null;
+var _chatRecording=false;
+var _chatBaseText='';
+
+function _startChatVoice(){
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  var input=document.getElementById('ai-chat-input');
+  var btn=document.getElementById('ai-chat-send');
+  var listening=document.getElementById('ai-chat-listening');
+  if(!SR){ toast('Reconhecimento de voz não suportado neste navegador'); return; }
+  _chatRecording=true;
+  _chatBaseText=(input&&input.value)?input.value+' ':'';
+  if(btn) btn.classList.add('recording');
+  if(listening) listening.classList.add('show');
+  _updateChatBtn();
+  _chatRecognition=new SR();
+  _chatRecognition.lang='pt-BR';
+  _chatRecognition.continuous=true;
+  _chatRecognition.interimResults=true;
+  _chatRecognition.onresult=function(e){
+    var finalTxt='', interim='';
+    for(var i=e.resultIndex;i<e.results.length;i++){
+      if(e.results[i].isFinal) finalTxt+=e.results[i][0].transcript;
+      else interim+=e.results[i][0].transcript;
+    }
+    if(finalTxt) _chatBaseText+=finalTxt+' ';
+    if(input) input.value=(_chatBaseText+interim).trim();
+  };
+  _chatRecognition.onerror=function(err){ if(err.error!=='no-speech') _stopChatVoice(); };
+  _chatRecognition.onend=function(){ if(_chatRecording){ try{ _chatRecognition.start(); }catch(e){} } };
+  try{ _chatRecognition.start(); }catch(e){ _chatRecording=false; if(btn) btn.classList.remove('recording'); if(listening) listening.classList.remove('show'); }
+}
+
+function _stopChatVoice(){
+  _chatRecording=false;
+  var btn=document.getElementById('ai-chat-send');
+  var listening=document.getElementById('ai-chat-listening');
+  if(btn) btn.classList.remove('recording');
+  if(listening) listening.classList.remove('show');
+  try{ if(_chatRecognition) _chatRecognition.stop(); }catch(e){}
+  _updateChatBtn();
+  // Foca no campo para o usuário revisar/editar antes de enviar (estilo WhatsApp)
+  var input=document.getElementById('ai-chat-input');
+  if(input){ input.focus(); }
+}
+
 async function aiChatSend(){
+  // Se estiver gravando, para antes de enviar
+  if(_chatRecording) _stopChatVoice();
   var input=document.getElementById('ai-chat-input');
   if(!input) return;
   var msg=input.value.trim();
   if(!msg) return;
   input.value='';
+  _updateChatBtn();
   _aiAddBubble(msg,'ai-user');
 
   var typing=_aiAddBubble('digitando...','ai-typing');
