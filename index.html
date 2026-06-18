@@ -1779,7 +1779,16 @@ var auth = firebase.auth();
 // ═══════════════════════════════════════
 // CONSTANTS & STATE
 // ═══════════════════════════════════════
-const USER = 'Vitor';
+// Retorna o primeiro nome do usuário logado (ou 'Usuário' como fallback seguro)
+function getUserFirstName(){
+  try{
+    if(typeof currentUser !== 'undefined' && currentUser && currentUser.name){
+      var first = String(currentUser.name).trim().split(/\s+/)[0];
+      if(first) return first;
+    }
+  }catch(e){}
+  return 'Usuário';
+}
 const BANKS = ['Nubank','Itaú','Bradesco','Santander','Banco do Brasil','Caixa Econômica','Inter','C6 Bank','BTG Pactual','XP Investimentos','Rico','Clear','Avenue','Sicoob','Sicredi','Safra','Modalmais','Órama','Kinvo','Picpay','Next','Neon','Mercado Pago','PagBank','BS2'];
 const CDI_ATUAL = 0.1065; // 10.65% a.a. referência
 const IPCA_ATUAL = 0.0452; // 4.52% a.a. referência
@@ -2069,8 +2078,8 @@ function updateHome(){
   irEl.textContent=(invRes>=0?'+':'-')+'R$'+fm0(Math.abs(invRes));
   irEl.style.color=invRes>=0?'var(--green)':'var(--red)';
 
-  // Briefing
-  let msg=`<strong>${sal}, ${USER}!</strong> `;
+  // Briefing — usa o primeiro nome do usuário logado
+  let msg=`<strong>${sal}, ${getUserFirstName()}!</strong> `;
   if(!todayEvts.length) msg+=`Você não tem eventos hoje. `;
   else msg+=`Hoje você tem <strong>${todayEvts.length} evento${todayEvts.length>1?'s':''}</strong>: ${todayEvts.slice(0,2).map(e=>`<strong>${e.time}</strong> ${e.title}`).join(', ')}. `;
   if(pendTasks.length) msg+=`<strong>${pendTasks.length} tarefa${pendTasks.length>1?'s':''}</strong> pendente${pendTasks.length>1?'s':''}. `;
@@ -5062,6 +5071,7 @@ function initAuth(){
           currentUser.phone     = p.phone     || '';
           currentUser.patrimony = p.patrimony || '';
           updateUserUI();
+          try{ updateHome(); }catch(e){} // atualiza a saudação com o nome do perfil
         } else {
           // First login (e.g. Google) — create profile doc
           db.collection('users').doc(user.uid).set({
