@@ -1,6 +1,7 @@
 // Cloudflare Pages Function — POST /api/chat
 // Agente conversacional sobre os dados do Planni, com function calling (Gemini).
 // Recebe { message, history, context } e devolve { reply, actions }.
+// actions = lista de ações que o app deve executar (criar evento/tarefa/etc).
 // A chave fica em GEMINI_API_KEY (variável de ambiente), nunca no client.
 
 const SYSTEM = `Você é o assistente do app Planni, um organizador pessoal de finanças, agenda, tarefas e notas (em português do Brasil).
@@ -87,6 +88,7 @@ export async function onRequestPost(context) {
     const ctx = (body && body.context) || {};
     if (!message) return new Response(JSON.stringify({ error: 'Mensagem ausente.' }), { status: 400, headers: cors });
 
+    // Build conversation: system + context as first user turn, then history, then new message
     const contents = [];
     contents.push({ role: 'user', parts: [{ text: SYSTEM + '\n\n=== ESTADO ATUAL DO APP ===\n' + JSON.stringify(ctx) }] });
     contents.push({ role: 'model', parts: [{ text: 'Entendido. Estou pronto para ajudar com seus dados.' }] });
@@ -127,3 +129,20 @@ export async function onRequestPost(context) {
     }
     if (!reply) reply = 'Desculpe, não entendi. Pode reformular?';
 
+    return new Response(JSON.stringify({ reply: reply, actions: actions }), { status: 200, headers: cors });
+
+  } catch (err) {
+    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: cors });
+  }
+}
+
+export async function onRequestOptions() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type'
+    }
+  });
+}
