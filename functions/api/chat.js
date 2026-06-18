@@ -125,5 +125,5 @@ export async function onRequestPost(context) {
     if (!reply && actions.length) {
       reply = 'Feito! ' + actions.map(function (a) { return a.name.replace('criar_', '+ '); }).join(', ');
     }
-    iif (!reply) reply = 'Desculpe, não entendi. Pode reformular?';
+    if (!reply) reply = 'Desculpe, não entendi. Pode reformular?';
 
