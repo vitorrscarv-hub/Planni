@@ -626,6 +626,11 @@ input[list]{background-image:none}
 .q2{background:#e7f6ec;border-color:#bfe6cd}
 .q3{background:#fff3e0;border-color:#f6dcb0}
 .q4{background:#eef1f6;border-color:#d6dde8}
+.ai-bubble{max-width:85%;padding:11px 14px;border-radius:16px;font-size:14px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word}
+.ai-bubble.ai-bot{align-self:flex-start;background:var(--sky-xl);color:var(--ink);border-bottom-left-radius:5px}
+.ai-bubble.ai-user{align-self:flex-end;background:var(--sky);color:#fff;border-bottom-right-radius:5px}
+.ai-bubble.ai-action{align-self:flex-start;background:#fff;border:1.5px solid var(--border);color:var(--ink2);font-size:13px;font-style:italic}
+.ai-typing{align-self:flex-start;color:var(--ink3);font-size:13px;font-style:italic;padding:4px 8px}
 </style>
 </head>
 <body>
@@ -1286,6 +1291,21 @@ input[list]{background-image:none}
     </div>
     <div style="font-size:15px;font-weight:600;color:#fff;line-height:1.6" id="ai-briefing">Analisando seus dados financeiros...</div>
   </div>
+
+  <!-- CHAT ASSISTANT -->
+  <div class="section-title">Converse com o Planni</div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <div id="ai-chat-messages" style="max-height:380px;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px">
+      <div class="ai-bubble ai-bot">Oi! Sou seu assistente. Posso analisar seus dados e criar eventos, tarefas, notas e transações. Experimente: <i>"quanto gastei esse mês?"</i> ou <i>"crie uma tarefa importante de pagar o aluguel"</i>.</div>
+    </div>
+    <div style="display:flex;gap:8px;padding:12px;border-top:1.5px solid var(--border);background:var(--white)">
+      <input id="ai-chat-input" type="text" placeholder="Pergunte ou peça algo..." style="flex:1;border:1.5px solid var(--border);border-radius:100px;padding:11px 16px;font-family:inherit;font-size:14px;background:var(--bg)" onkeydown="if(event.key==='Enter')aiChatSend()">
+      <button onclick="aiChatSend()" id="ai-chat-send" style="background:var(--sky);border:none;border-radius:50%;width:44px;height:44px;flex-shrink:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:#fff">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+  </div>
+
   <div class="section-title">Insights & Alertas</div>
   <div class="card" id="ai-insights"><div class="empty"><div class="empty-icon">🤖</div>Adicione transações para receber análises personalizadas</div></div>
   <div class="section-title">Importar Extrato Bancário</div>
@@ -5762,6 +5782,126 @@ function generateExcelReport(){
   const a=document.createElement('a'); a.href=url; a.download='planni-'+month+'.csv'; a.click();
   URL.revokeObjectURL(url);
   toast('✓ Exportado para Excel!');
+}
+
+// ════════════ AI CHAT AGENT ════════════
+var _aiChatHistory = [];
+
+function _aiAddBubble(text, cls){
+  var box=document.getElementById('ai-chat-messages');
+  if(!box) return null;
+  var div=document.createElement('div');
+  div.className='ai-bubble '+cls;
+  div.innerHTML=text;
+  box.appendChild(div);
+  box.scrollTop=box.scrollHeight;
+  return div;
+}
+
+function _aiBuildContext(){
+  // Compact snapshot so we don't blow the token budget
+  function slim(arr,fields,max){
+    return (arr||[]).slice(0,max||40).map(function(o){
+      var r={}; fields.forEach(function(f){ if(o[f]!==undefined) r[f]=o[f]; }); return r;
+    });
+  }
+  return {
+    hoje: today(),
+    mesAtual: state.viewMonth,
+    eventos: slim(state.events,['title','date','time'],40),
+    tarefas: slim(state.tasks,['text','done','importante','urgente'],40),
+    transacoes: slim(state.transactions,['desc','val','type','cat','date'],60),
+    notas: slim(state.notes,['title'],30),
+    contas: slim(state.bills,['name','val','due','paid'],30)
+  };
+}
+
+async function aiChatSend(){
+  var input=document.getElementById('ai-chat-input');
+  if(!input) return;
+  var msg=input.value.trim();
+  if(!msg) return;
+  input.value='';
+  _aiAddBubble(msg,'ai-user');
+
+  var typing=_aiAddBubble('digitando...','ai-typing');
+
+  try{
+    var resp=await fetch('/api/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ message:msg, history:_aiChatHistory.slice(-8), context:_aiBuildContext() })
+    });
+    if(typing) typing.remove();
+    if(!resp.ok) throw new Error('API '+resp.status);
+    var data=await resp.json();
+    if(data.error) throw new Error(data.error);
+
+    // Execute any actions returned
+    var done=[];
+    (data.actions||[]).forEach(function(a){
+      var label=_aiExecuteAction(a);
+      if(label) done.push(label);
+    });
+
+    _aiAddBubble(data.reply||'Feito!','ai-bot');
+    if(done.length){
+      _aiAddBubble('✓ '+done.join('<br>✓ '),'ai-action');
+      save(); updateHome();
+    }
+
+    _aiChatHistory.push({role:'user',text:msg});
+    _aiChatHistory.push({role:'model',text:data.reply||''});
+
+  }catch(err){
+    if(typing) typing.remove();
+    _aiAddBubble('Ops, não consegui responder agora. ('+err.message+')','ai-bot');
+  }
+}
+
+// Executes a create-action returned by the agent. Returns a human label or null.
+function _aiExecuteAction(a){
+  var args=a.args||{};
+  try{
+    if(a.name==='criar_evento'){
+      state.events.push({
+        id:uid(), title:args.titulo||'Evento',
+        date:args.data, time:args.hora||'09:00',
+        color:'#2d7dd2', remind:(args.lembrete_min!==undefined?args.lembrete_min:15)
+      });
+      if(typeof renderEvents==='function') renderEvents();
+      return 'Evento: '+(args.titulo||'')+' ('+args.data+' '+(args.hora||'')+')';
+    }
+    if(a.name==='criar_tarefa'){
+      state.tasks.unshift({
+        id:uid(), text:args.texto||'Tarefa', done:false,
+        importante:(args.importante===false?0:1),
+        urgente:(args.urgente===true?1:0)
+      });
+      if(typeof renderTasks==='function') renderTasks();
+      return 'Tarefa: '+(args.texto||'');
+    }
+    if(a.name==='criar_transacao'){
+      var tp=(args.tipo==='in')?'in':'out';
+      state.transactions.unshift({
+        id:uid(), desc:args.descricao||'Transação',
+        val:Math.abs(args.valor||0), type:tp,
+        cat:(tp==='in'?'salario':'outros'), date:args.data||today(), recur:false
+      });
+      if(typeof renderFinance==='function') renderFinance();
+      return (tp==='in'?'Receita':'Despesa')+': '+(args.descricao||'')+' R$'+fm(Math.abs(args.valor||0));
+    }
+    if(a.name==='criar_nota'){
+      _ensureFolders();
+      state.notes.unshift({
+        id:uid(), title:args.titulo||'Nota', body:args.corpo||'',
+        folderId:'default', date:today()
+      });
+      if(typeof renderNotes==='function') renderNotes();
+      return 'Nota: '+(args.titulo||'');
+    }
+  }catch(e){ return null; }
+  return null;
 }
 
 init();
