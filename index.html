@@ -5885,7 +5885,8 @@ function _updateChatBtn(){
 function _chatBtnTap(){
   var input=document.getElementById('ai-chat-input');
   var hasText=input && input.value.trim().length>0;
-  if(_chatRecording){ _stopChatVoice(); return; }
+  // Tocar no microfone durante a gravação: para E envia automaticamente (fluxo fluido)
+  if(_chatRecording){ _stopChatVoice(true); return; }
   if(hasText){ aiChatSend(); }
   else { _startChatVoice(); }
 }
@@ -5919,12 +5920,13 @@ function _startChatVoice(){
     if(finalTxt) _chatBaseText+=finalTxt+' ';
     if(input) input.value=(_chatBaseText+interim).trim();
   };
-  _chatRecognition.onerror=function(err){ if(err.error!=='no-speech') _stopChatVoice(); };
+  _chatRecognition.onerror=function(err){ if(err.error!=='no-speech') _stopChatVoice(false); };
   _chatRecognition.onend=function(){ if(_chatRecording){ try{ _chatRecognition.start(); }catch(e){} } };
   try{ _chatRecognition.start(); }catch(e){ _chatRecording=false; if(btn) btn.classList.remove('recording'); if(listening) listening.classList.remove('show'); }
 }
 
-function _stopChatVoice(){
+// autoSend=true: ao parar a gravação, envia a mensagem automaticamente
+function _stopChatVoice(autoSend){
   _chatRecording=false;
   var btn=document.getElementById('ai-chat-send');
   var listening=document.getElementById('ai-chat-listening');
@@ -5932,9 +5934,16 @@ function _stopChatVoice(){
   if(listening) listening.classList.remove('show');
   try{ if(_chatRecognition) _chatRecognition.stop(); }catch(e){}
   _updateChatBtn();
-  // Foca no campo para o usuário revisar/editar antes de enviar (estilo WhatsApp)
   var input=document.getElementById('ai-chat-input');
-  if(input){ input.focus(); }
+  if(autoSend){
+    // Pequeno atraso garante que a última transcrição entrou no campo antes de enviar
+    setTimeout(function(){
+      if(input && input.value.trim().length>0){ aiChatSend(); }
+      else if(input){ input.focus(); }
+    }, 350);
+  } else if(input){
+    input.focus();
+  }
 }
 
 async function aiChatSend(){
