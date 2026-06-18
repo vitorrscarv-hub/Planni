@@ -631,6 +631,34 @@ input[list]{background-image:none}
 .ai-bubble.ai-user{align-self:flex-end;background:var(--sky);color:#fff;border-bottom-right-radius:5px}
 .ai-bubble.ai-action{align-self:flex-start;background:#fff;border:1.5px solid var(--border);color:var(--ink2);font-size:13px;font-style:italic}
 .ai-typing{align-self:flex-start;color:var(--ink3);font-size:13px;font-style:italic;padding:4px 8px}
+/* ══════ INSIGHTS CARROSSEL (Início) ══════ */
+#insights-track::-webkit-scrollbar{display:none}
+.insight-card{flex:0 0 86%;scroll-snap-align:center;border-radius:var(--r2);padding:16px 18px;min-height:96px;display:flex;flex-direction:column;justify-content:center;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.insight-card .ic-icon{font-size:22px;margin-bottom:8px}
+.insight-card .ic-title{font-size:13px;font-weight:900;margin-bottom:4px;letter-spacing:.01em}
+.insight-card .ic-text{font-size:12px;font-weight:500;line-height:1.5;opacity:.92}
+.insight-dot{width:6px;height:6px;border-radius:50%;background:var(--ink4);transition:all .2s}
+.insight-dot.on{background:var(--sky);width:18px;border-radius:3px}
+
+/* ══════ CHAT IA FLUTUANTE ══════ */
+#fab-main{width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,#667eea,#764ba2);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 28px rgba(118,75,162,.5),0 0 0 3px rgba(118,75,162,.12);transition:transform .2s}
+#fab-main:active{transform:scale(.92)}
+#ai-chat-sheet{position:fixed;inset:0;z-index:600;background:rgba(13,31,60,.45);backdrop-filter:blur(8px);display:none;align-items:flex-end;justify-content:center}
+#ai-chat-sheet.show{display:flex}
+.ai-chat-panel{background:var(--white);border-radius:24px 24px 0 0;width:100%;max-width:480px;height:78vh;display:flex;flex-direction:column;animation:slideUp .3s ease;border-top:1.5px solid var(--border);overflow:hidden}
+.ai-chat-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1.5px solid var(--border);flex-shrink:0;background:var(--white)}
+.ai-chat-avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+#ai-chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
+.ai-chat-inputbar{display:flex;gap:8px;padding:12px;border-top:1.5px solid var(--border);background:var(--white);flex-shrink:0}
+.ai-chat-inputbar input{flex:1;border:1.5px solid var(--border);border-radius:100px;padding:12px 16px;font-family:inherit;font-size:15px;background:var(--bg);color:var(--ink);outline:none}
+.ai-chat-inputbar input:focus{border-color:var(--sky)}
+#ai-chat-send{background:linear-gradient(135deg,#667eea,#764ba2);border:none;border-radius:50%;width:46px;height:46px;flex-shrink:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:#fff}
+#ai-chat-send:active{transform:scale(.93)}
+.ai-bubble{max-width:82%;padding:11px 14px;border-radius:16px;font-size:14px;font-weight:500;line-height:1.5;word-wrap:break-word}
+.ai-bubble.ai-bot{align-self:flex-start;background:var(--white);color:var(--ink);border:1.5px solid var(--border);border-bottom-left-radius:5px}
+.ai-bubble.ai-user{align-self:flex-end;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-bottom-right-radius:5px}
+.ai-bubble.ai-typing{align-self:flex-start;background:var(--white);color:var(--ink3);border:1.5px solid var(--border);font-style:italic}
+.ai-bubble.ai-action{align-self:flex-start;background:#e7f6ec;color:#157a45;font-size:12px;font-weight:700;border:1.5px solid #bfe6cd}
 </style>
 </head>
 <body>
@@ -672,9 +700,6 @@ input[list]{background-image:none}
   <button class="tab" onclick="showScreen('agenda',this)">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg> Agenda<span class="premium-tab-badge"><svg width="9" height="9" viewBox="0 0 24 24" fill="#a8b8c8"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg></span>
   </button>
-  <button class="tab" onclick="showScreen('ai',this)">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg> IA<span class="premium-tab-badge"><svg width="9" height="9" viewBox="0 0 24 24" fill="#a8b8c8"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg></span>
-  </button>
 </div>
 <div id="content">
 
@@ -683,6 +708,15 @@ input[list]{background-image:none}
   <div class="briefing-wrap">
     <div class="briefing-tag"><span class="live-dot"></span> Assistente Planni</div>
     <div id="briefing-text">Carregando...</div>
+  </div>
+
+  <!-- CARROSSEL DE INSIGHTS -->
+  <div id="home-insights-wrap" style="margin-bottom:14px;display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:0 2px 8px">
+      <div class="section-title" style="margin:0">✨ Insights</div>
+      <div id="insights-dots" style="display:flex;gap:5px"></div>
+    </div>
+    <div id="insights-track" style="display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:10px;scrollbar-width:none;-webkit-overflow-scrolling:touch" onscroll="_syncInsightDots()"></div>
   </div>
   <div class="stats-grid">
     <div class="stat-box" onclick="navTo('agenda')" style="cursor:pointer;transition:transform .15s,box-shadow .15s" ontouchstart="this.style.transform='scale(.97)'" ontouchend="this.style.transform=''">
@@ -1285,39 +1319,8 @@ input[list]{background-image:none}
 
 <!-- IA FINANCEIRA -->
 <div id="screen-ai" class="screen">
-  <div style="background:linear-gradient(135deg,#667eea,#764ba2);border-radius:var(--r3);padding:22px 20px;margin-bottom:14px">
-    <div style="font-size:10px;font-weight:800;color:rgba(255,255,255,.6);letter-spacing:.16em;text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:6px">
-      <span class="live-dot" style="background:#fff"></span> Assistente Financeiro IA
-    </div>
-    <div style="font-size:15px;font-weight:600;color:#fff;line-height:1.6" id="ai-briefing">Analisando seus dados financeiros...</div>
-  </div>
-
-  <!-- CHAT ASSISTANT -->
-  <div class="section-title">Converse com o Planni</div>
-  <div class="card" style="padding:0;overflow:hidden">
-    <div id="ai-chat-messages" style="max-height:380px;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px">
-      <div class="ai-bubble ai-bot">Oi! Sou seu assistente. Posso analisar seus dados e criar eventos, tarefas, notas e transações. Experimente: <i>"quanto gastei esse mês?"</i> ou <i>"crie uma tarefa importante de pagar o aluguel"</i>.</div>
-    </div>
-    <div style="display:flex;gap:8px;padding:12px;border-top:1.5px solid var(--border);background:var(--white)">
-      <input id="ai-chat-input" type="text" placeholder="Pergunte ou peça algo..." style="flex:1;border:1.5px solid var(--border);border-radius:100px;padding:11px 16px;font-family:inherit;font-size:14px;background:var(--bg)" onkeydown="if(event.key==='Enter')aiChatSend()">
-      <button onclick="aiChatSend()" id="ai-chat-send" style="background:var(--sky);border:none;border-radius:50%;width:44px;height:44px;flex-shrink:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:#fff">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-      </button>
-    </div>
-  </div>
-
-  <div class="section-title">Insights & Alertas</div>
-  <div class="card" id="ai-insights"><div class="empty"><div class="empty-icon">🤖</div>Adicione transações para receber análises personalizadas</div></div>
-  <div class="section-title">Importar Extrato Bancário</div>
-  <div class="card">
-    <div class="card-title blue">Importação OFX / CSV</div>
-    <div class="import-drop" onclick="document.getElementById('import-file').click()">
-      <div style="font-size:32px;margin-bottom:8px">📂</div>
-      <div style="font-size:14px;font-weight:800;color:var(--ink);margin-bottom:4px">Toque para selecionar arquivo</div>
-      <div style="font-size:11px;color:var(--ink3)">Suporta OFX (extrato bancário) e CSV</div>
-    </div>
-    <input type="file" id="import-file" accept=".ofx,.csv,.txt" style="display:none" onchange="handleImportFile(this)">
-  </div>
+  <!-- Tela IA descontinuada: o chat agora é flutuante (acessível de qualquer aba)
+       e os insights ficam na Início. Mantido vazio por compatibilidade. -->
 </div>
 <!-- /screen-ai -->
 
@@ -1562,27 +1565,37 @@ input[list]{background-image:none}
 
 <!-- FAB EXPANDÍVEL -->
 <div id="fab-container">
-  <!-- Labels -->
-  <div class="fab-label" id="fab-label-voice" style="right:68px">Voz</div>
-  <div class="fab-label" id="fab-label-income" style="right:68px">Receita</div>
-  <div class="fab-label" id="fab-label-expense" style="right:68px">Despesa</div>
-  <!-- Sub buttons -->
-  <button class="fab-sub" id="fab-voice" onclick="openVoiceFromFAB()" style="background:linear-gradient(135deg,#764ba2,#4a1a6c)">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+  <!-- Botão único: abre o assistente IA (cria transações, tarefas, eventos e notas por conversa) -->
+  <button id="fab-main" onclick="openAIChat()" aria-label="Conversar com a IA">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="white"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg>
   </button>
-  <button class="fab-sub" id="fab-income" onclick="openQuickAdd('in')">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-  </button>
-  <button class="fab-sub" id="fab-expense" onclick="openQuickAdd('out')">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M19 13H5v-2h14v2z"/></svg>
-  </button>
-  <!-- Main FAB -->
-  <button id="fab-main" onclick="toggleFAB()">
-    <svg id="fab-mic-icon" width="28" height="28" viewBox="0 0 24 24" fill="white"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
-    <svg id="fab-close-icon" width="26" height="26" viewBox="0 0 24 24" fill="white" style="display:none"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-  </button>
-  <!-- Backdrop -->
-  <div id="fab-backdrop" onclick="closeFAB()"></div>
+</div>
+
+<!-- PAINEL DE CHAT IA FLUTUANTE (acessível de qualquer aba) -->
+<div id="ai-chat-sheet">
+  <div class="ai-chat-panel" onclick="event.stopPropagation()">
+    <div class="ai-chat-header">
+      <div style="display:flex;align-items:center;gap:9px">
+        <div class="ai-chat-avatar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+        </div>
+        <div>
+          <div style="font-size:14px;font-weight:800;color:var(--ink);line-height:1.1">Assistente Planni</div>
+          <div style="font-size:10px;font-weight:600;color:var(--green);display:flex;align-items:center;gap:4px"><span class="live-dot" style="background:var(--green)"></span> online</div>
+        </div>
+      </div>
+      <button onclick="closeAIChat()" style="background:none;border:none;cursor:pointer;color:var(--ink3);padding:6px;font-size:20px;line-height:1">✕</button>
+    </div>
+    <div id="ai-chat-messages">
+      <div class="ai-bubble ai-bot">Oi! Sou seu assistente. Posso analisar seus dados e criar eventos, tarefas, notas e transações. Experimente: <i>"quanto gastei esse mês?"</i> ou <i>"crie uma tarefa importante de pagar o aluguel"</i>.</div>
+    </div>
+    <div class="ai-chat-inputbar">
+      <input id="ai-chat-input" type="text" placeholder="Pergunte ou peça algo..." onkeydown="if(event.key==='Enter')aiChatSend()">
+      <button onclick="aiChatSend()" id="ai-chat-send" aria-label="Enviar">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+  </div>
 </div>
 
 <!-- HOME BACK BUTTON -->
@@ -2052,6 +2065,9 @@ function updateHome(){
 
   // Weekly summary
   buildWeeklySummary();
+
+  // Insights carousel
+  try{ renderHomeInsights(); }catch(e){}
 
   // Agenda list
   const agEl=document.getElementById('h-agenda');
@@ -3911,13 +3927,27 @@ function calNextMonth(){
   if(panel) panel.style.display = 'none';
   renderCalendar();
 }
-var _fabOpen = false;
-var _fabVoiceMode = false; // true when expanded for voice, false when collapsed
-
-function openVoiceFromFAB(){
-  closeFAB();
-  document.getElementById('voice-modal').classList.add('show');
+// ── Chat IA flutuante (substitui o antigo FAB de +/−) ──
+function openAIChat(){
+  var sheet=document.getElementById('ai-chat-sheet');
+  if(sheet){ sheet.classList.add('show'); }
+  setTimeout(function(){ var i=document.getElementById('ai-chat-input'); if(i) i.focus(); },250);
 }
+function closeAIChat(){
+  var sheet=document.getElementById('ai-chat-sheet');
+  if(sheet) sheet.classList.remove('show');
+}
+// Fecha o chat ao tocar fora do painel
+document.addEventListener('click', function(e){
+  var sheet=document.getElementById('ai-chat-sheet');
+  if(sheet && sheet.classList.contains('show') && e.target===sheet) closeAIChat();
+});
+
+// Stubs de compatibilidade (antigos FAB/voz não existem mais, mas algumas chamadas legadas podem persistir)
+function toggleFAB(){ openAIChat(); }
+function openFAB(){ openAIChat(); }
+function closeFAB(){}
+function openVoiceFromFAB(){}
 
 function closeVoice(){
   try{ stopRecording(); }catch(e){}
@@ -3925,49 +3955,10 @@ function closeVoice(){
   if(vm) vm.classList.remove('show');
 }
 
-function toggleFAB(){
-  if(_fabOpen){
-    closeFAB();
-  } else {
-    openFAB();
-  }
-}
-
-function openFAB(){
-  _fabOpen = true;
-  var container = document.getElementById('fab-container');
-  var mainBtn   = document.getElementById('fab-main');
-  var micIcon   = document.getElementById('fab-mic-icon');
-  var closeIcon = document.getElementById('fab-close-icon');
-  if(container) container.classList.add('open');
-  if(mainBtn)   mainBtn.classList.add('open');
-  if(micIcon)   micIcon.style.display  = 'none';
-  if(closeIcon) closeIcon.style.display = 'block';
-}
-
-function closeFAB(){
-  _fabOpen = false;
-  var container = document.getElementById('fab-container');
-  var mainBtn   = document.getElementById('fab-main');
-  var micIcon   = document.getElementById('fab-mic-icon');
-  var closeIcon = document.getElementById('fab-close-icon');
-  if(container) container.classList.remove('open');
-  if(mainBtn)   mainBtn.classList.remove('open');
-  if(micIcon)   micIcon.style.display  = 'block';
-  if(closeIcon) closeIcon.style.display = 'none';
-}
-
-// Override toggleVoice to use the FAB open state
-var _toggleVoiceOrig = toggleVoice;
-function toggleVoice(){
-  if(_fabOpen){ closeFAB(); }
-  document.getElementById('voice-modal').classList.add('show');
-}
-
 // ═══════════════════════════════════════════════════════
 // SCREEN TRANSITIONS — iPhone style
 // ═══════════════════════════════════════════════════════
-var _tabOrder=['home','finance','bills','goals','notes','tasks','reports','dashboard','invest','agenda','ai'];
+var _tabOrder=['home','finance','bills','goals','notes','tasks','reports','dashboard','invest','agenda'];
 var _currentScreenName='home';
 
 var _showScreenCore=showScreen;
@@ -4002,10 +3993,8 @@ function showScreen(name,el){
   }
   if(name==='bills'){renderBillsSummary();renderBills();}
   if(name==='dashboard') buildDashboard();
-  if(name==='ai'){buildAISuggestions();buildAIBriefing();}
   if(name==='reports'){switchReportTab('relatorios');buildAnnualSummary();buildMonthlyEvolution();}
   updateHomeBackBtn(name);
-  if(_fabOpen) closeFAB();
 }
 
 async function fetchPTAXForInvest(){
@@ -5600,6 +5589,50 @@ function buildAISuggestions(){
         <div style="font-size:12px;font-weight:500;color:var(--ink2);line-height:1.5">${i.text}</div>
       </div>
     </div>`).join(''):'<div class="empty"><div class="empty-icon">🤖</div>Adicione transações para receber análises</div>';
+}
+
+// ── Carrossel de insights na Início ──
+// Paleta de fundos suaves conforme a cor do insight
+function _insightBg(color){
+  if(color==='var(--red)')   return {bg:'linear-gradient(135deg,#fde8e6,#fbd5d0)', fg:'#b02010', tx:'#7a2018'};
+  if(color==='var(--green)') return {bg:'linear-gradient(135deg,#e6f9f0,#ccf2e0)', fg:'#0e7040', tx:'#0c5a34'};
+  if(color==='var(--orange)')return {bg:'linear-gradient(135deg,#fff3dc,#ffe6bf)', fg:'#b9701a', tx:'#8a5414'};
+  return {bg:'linear-gradient(135deg,#eaf3ff,#d6e9ff)', fg:'#1a5faa', tx:'#0f3a6b'}; // sky / default
+}
+function renderHomeInsights(){
+  var wrap=document.getElementById('home-insights-wrap');
+  var track=document.getElementById('insights-track');
+  var dots=document.getElementById('insights-dots');
+  if(!wrap||!track) return;
+  var insights=[];
+  try{ insights=generateInsights(); }catch(e){ insights=[]; }
+  if(!insights.length){ wrap.style.display='none'; track.innerHTML=''; if(dots) dots.innerHTML=''; return; }
+  wrap.style.display='block';
+  track.innerHTML=insights.map(function(i){
+    var c=_insightBg(i.color);
+    return '<div class="insight-card" style="background:'+c.bg+'">'
+      +'<div class="ic-icon">'+i.icon+'</div>'
+      +'<div class="ic-title" style="color:'+c.fg+'">'+i.title+'</div>'
+      +'<div class="ic-text" style="color:'+c.tx+'">'+i.text+'</div>'
+      +'</div>';
+  }).join('');
+  if(dots){
+    dots.innerHTML=insights.map(function(_,idx){ return '<div class="insight-dot'+(idx===0?' on':'')+'"></div>'; }).join('');
+  }
+  _syncInsightDots();
+}
+function _syncInsightDots(){
+  var track=document.getElementById('insights-track');
+  var dots=document.getElementById('insights-dots');
+  if(!track||!dots) return;
+  var cards=track.children;
+  if(!cards.length) return;
+  var cardW=cards[0].offsetWidth+10; // width + gap
+  var idx=Math.round(track.scrollLeft/cardW);
+  var dotEls=dots.children;
+  for(var i=0;i<dotEls.length;i++){
+    if(i===idx) dotEls[i].classList.add('on'); else dotEls[i].classList.remove('on');
+  }
 }
 
 // ═══════════════════════════════════════════════════════
