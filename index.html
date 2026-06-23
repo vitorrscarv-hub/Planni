@@ -652,7 +652,33 @@ input[list]{background-image:none}
 .ai-chat-inputbar{display:flex;gap:8px;padding:12px;border-top:1.5px solid var(--border);background:var(--white);flex-shrink:0}
 .ai-chat-inputbar input{flex:1;border:1.5px solid var(--border);border-radius:100px;padding:12px 16px;font-family:inherit;font-size:15px;background:var(--bg);color:var(--ink);outline:none}
 .ai-chat-inputbar input:focus{border-color:var(--sky)}
+#ai-chat-attach{background:var(--bg);border:1.5px solid var(--border);border-radius:50%;width:42px;height:42px;flex-shrink:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:var(--ink3);transition:all .15s}
+#ai-chat-attach:active{transform:scale(.92);background:var(--border)}
+#ai-chat-attach.has-result{color:var(--sky);border-color:var(--sky)}
 #ai-chat-send{background:linear-gradient(135deg,#667eea,#764ba2);border:none;border-radius:50%;width:46px;height:46px;flex-shrink:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:#fff;transition:background .2s}
+
+/* ── Resumo de importação de extrato (confirmação) ── */
+.extrato-summary{background:var(--white);border:1.5px solid var(--border);border-radius:16px;padding:14px;margin:8px 0;max-width:88%;align-self:flex-start}
+.extrato-summary .es-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-weight:800;font-size:13px;color:var(--ink)}
+.extrato-summary .es-stats{display:flex;gap:8px;margin-bottom:10px}
+.extrato-summary .es-stat{flex:1;border-radius:10px;padding:8px 10px;text-align:center}
+.extrato-summary .es-stat.in{background:#e7f6ec}
+.extrato-summary .es-stat.out{background:#fde8e6}
+.extrato-summary .es-stat .es-val{font-size:14px;font-weight:900}
+.extrato-summary .es-stat.in .es-val{color:#157a45}
+.extrato-summary .es-stat.out .es-val{color:#b02010}
+.extrato-summary .es-stat .es-lbl{font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.04em}
+.extrato-summary .es-list{max-height:180px;overflow-y:auto;border-top:1px solid var(--border);padding-top:8px;margin-bottom:10px}
+.extrato-summary .es-item{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;padding:4px 0;color:var(--ink2)}
+.extrato-summary .es-item .es-item-desc{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:8px}
+.extrato-summary .es-item .es-item-val{font-weight:700;flex-shrink:0}
+.extrato-summary .es-item .es-item-val.in{color:#157a45}
+.extrato-summary .es-item .es-item-val.out{color:#b02010}
+.extrato-summary .es-actions{display:flex;gap:8px}
+.extrato-summary .es-btn{flex:1;border:none;border-radius:100px;padding:9px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer}
+.extrato-summary .es-btn.confirm{background:var(--grad);color:#fff}
+.extrato-summary .es-btn.cancel{background:var(--bg);color:var(--ink3)}
+.extrato-processing{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink3);font-style:italic;align-self:flex-start;padding:8px 0}
 #ai-chat-send:active{transform:scale(.93)}
 #ai-chat-send.recording{background:linear-gradient(135deg,#e0422d,#c0392b);animation:chatMicPulse 1.2s ease-in-out infinite}
 @keyframes chatMicPulse{0%,100%{box-shadow:0 0 0 0 rgba(224,66,45,.5)}50%{box-shadow:0 0 0 10px rgba(224,66,45,0)}}
@@ -756,7 +782,13 @@ input[list]{background-image:none}
 </div>
 
 <!-- FINANÇAS -->
-<div id="screen-finance" class="screen">
+<div id="screen-finance" class="screen screen-premium-wrap">
+<div id="finance-lock" class="premium-lock" style="display:none" onclick="openPremiumModal()">
+  <div class="premium-lock-icon">💰</div>
+  <div class="premium-lock-title">Finanças é Premium</div>
+  <div class="premium-lock-sub">Controle receitas, despesas, parcelas e veja pra onde vai cada real do seu dinheiro.</div>
+  <button class="btn-premium" onclick="openPremiumModal()">✦ Ativar Premium</button>
+</div>
 <div class="month-nav">
     <button class="month-nav-btn" onclick="changeMonth(-1)">‹</button>
     <div class="month-label" id="month-label"></div>
@@ -1335,7 +1367,13 @@ input[list]{background-image:none}
 <!-- /screen-ai -->
 
 <!-- RELATÓRIOS -->
-<div id="screen-reports" class="screen">
+<div id="screen-reports" class="screen screen-premium-wrap">
+<div id="reports-lock" class="premium-lock" style="display:none" onclick="openPremiumModal()">
+  <div class="premium-lock-icon">📊</div>
+  <div class="premium-lock-title">Relatórios é Premium</div>
+  <div class="premium-lock-sub">Veja sua evolução mensal, dashboard completo e exporte em PDF e Excel.</div>
+  <button class="btn-premium" onclick="openPremiumModal()">✦ Ativar Premium</button>
+</div>
 
   <!-- SUB-ABAS -->
   <div class="inv-tabs" style="margin-bottom:14px">
@@ -1604,11 +1642,16 @@ input[list]{background-image:none}
       Ouvindo... toque no microfone para parar
     </div>
     <div class="ai-chat-inputbar">
+      <button id="ai-chat-attach" aria-label="Anexar extrato" onclick="openExtratoPicker()" title="Anexar extrato bancário">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+      </button>
+      <input type="file" id="extrato-file-input" accept=".ofx,.csv,.txt,.pdf,image/*" style="display:none" onchange="handleExtratoFile(this)">
       <input id="ai-chat-input" type="text" placeholder="Pergunte ou peça algo..." oninput="_updateChatBtn()" onkeydown="if(event.key==='Enter')aiChatSend()">
       <button id="ai-chat-send" aria-label="Enviar ou gravar" onclick="_chatBtnTap()">
         <!-- Ícone microfone (campo vazio) -->
         <svg id="ai-btn-mic" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
         <!-- Ícone enviar (campo com texto) -->
+
         <svg id="ai-btn-send" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
       </button>
     </div>
@@ -3627,6 +3670,15 @@ function segPick(group, val, btn){
 function addTask(){
   const text=document.getElementById('task-input').value.trim();
   if(!text){ toast('Digite a tarefa'); return; }
+  // Limite de 10 tarefas ativas no plano gratuito
+  if(!isPremium){
+    var activeTasks = state.tasks.filter(function(t){ return !t.done; });
+    if(activeTasks.length >= PREMIUM_TASK_LIMIT){
+      toast('Limite de '+PREMIUM_TASK_LIMIT+' tarefas no plano gratuito.');
+      setTimeout(function(){ openPremiumModal(); }, 800);
+      return;
+    }
+  }
   state.tasks.unshift({
     id:uid(), text:text, done:false,
     importante:_taskSel.importante, urgente:_taskSel.urgente
@@ -3955,6 +4007,7 @@ function calNextMonth(){
 }
 // ── Chat IA flutuante (substitui o antigo FAB de +/−) ──
 function openAIChat(){
+  if(!isPremium){ openPremiumModal(); return; }
   var sheet=document.getElementById('ai-chat-sheet');
   if(sheet){ sheet.classList.add('show'); }
   try{ _updateChatBtn(); }catch(e){}
@@ -4774,21 +4827,64 @@ function refreshGroupEvents(){
   mergeGroupEvents(data.events||[]);
   renderGroupBar();
 }
-var PREMIUM_SCREENS = ['invest','agenda','ai'];
+var PREMIUM_SCREENS = ['invest','agenda','finance','reports'];
+var PREMIUM_TASK_LIMIT = 10; // máx de tarefas ativas no plano gratuito
 var PREMIUM_TEST_CODE = 'VITOR2025';
 var isPremium = false;
 
 function initPremium(){
+  // 1. Checa localStorage imediatamente (resposta rápida pra não piscar)
   var saved = localStorage.getItem('claudio_premium');
   isPremium = (saved === 'true' || saved === PREMIUM_TEST_CODE);
+  applyPremiumState();
+  // 2. Valida com Firebase (source of truth)
+  if(typeof currentUser !== 'undefined' && currentUser && currentUser.uid){
+    _syncPremiumFromFirebase(currentUser.uid);
+  }
+}
+
+function _syncPremiumFromFirebase(uid){
+  try{
+    firebase.firestore().collection('users').doc(uid).get().then(function(doc){
+      if(!doc.exists) return;
+      var data = doc.data();
+      var premiumFirebase = !!(data && data.premium);
+      // Firebase é a fonte da verdade
+      isPremium = premiumFirebase;
+      localStorage.setItem('claudio_premium', isPremium ? 'true' : 'false');
+      applyPremiumState();
+    }).catch(function(e){ console.warn('Premium sync:', e); });
+  }catch(e){}
+}
+
+function setPremiumStatus(value){
+  isPremium = !!value;
+  localStorage.setItem('claudio_premium', isPremium ? 'true' : 'false');
+  // Persiste no Firebase
+  try{
+    if(currentUser && currentUser.uid){
+      firebase.firestore().collection('users').doc(currentUser.uid)
+        .set({ premium: isPremium }, { merge: true });
+    }
+  }catch(e){}
   applyPremiumState();
 }
 
 function applyPremiumState(){
+  // Mostra/esconde overlays de lock nas telas premium
   PREMIUM_SCREENS.forEach(function(screen){
     var lock = document.getElementById(screen+'-lock');
     if(lock) lock.style.display = isPremium ? 'none' : 'flex';
   });
+  // FAB do chat: visual de bloqueado pra não-premium
+  var fab = document.getElementById('fab-main');
+  if(fab){
+    fab.style.opacity = isPremium ? '1' : '0.6';
+    fab.title = isPremium ? '' : 'Recurso Premium';
+  }
+  // Badge de limite de tarefas
+  _applyTaskLimit();
+  // Status no perfil
   var profPrem = document.getElementById('profile-premium-status');
   if(profPrem){
     if(isPremium){
@@ -4799,13 +4895,17 @@ function applyPremiumState(){
   }
 }
 
+function _applyTaskLimit(){
+  // No plano gratuito, avisa quando o usuário tenta criar mais de 10 tarefas
+  // A verificação real acontece em addTask()
+}
+
+
 function openPremiumModal(){ document.getElementById('premium-modal').classList.add('show'); }
 function closePremiumModal(){ document.getElementById('premium-modal').classList.remove('show'); }
 
 function activatePremiumTest(){
-  isPremium = true;
-  localStorage.setItem('claudio_premium','true');
-  applyPremiumState();
+  setPremiumStatus(true);
   closePremiumModal();
   toast('✦ Premium ativado! Bem-vindo ao Planni Premium.');
 }
@@ -4813,9 +4913,7 @@ function activatePremiumTest(){
 function activatePremiumCode(){
   var code = prompt('Digite o código de acesso Premium:');
   if(code && code.toUpperCase() === PREMIUM_TEST_CODE){
-    isPremium = true;
-    localStorage.setItem('claudio_premium', PREMIUM_TEST_CODE);
-    applyPremiumState();
+    setPremiumStatus(true);
     closePremiumModal();
     toast('✦ Código válido! Premium ativado.');
   } else if(code){
@@ -5849,6 +5947,11 @@ function generateExcelReport(){
 // ════════════ AI CHAT AGENT ════════════
 var _aiChatHistory = [];
 
+// ═══════════════════════════════════════════════════════
+// IMPORTAÇÃO DE EXTRATO VIA CHAT (Camada 1 — anexo + IA categoriza + confirmação)
+// O arquivo é lido no navegador, enviado para análise, e NUNCA fica salvo —
+// só as transações já estruturadas (depois de confirmadas) entram no Finanças.
+// ═══════════════════════════════════════════════════════
 function _aiAddBubble(text, cls){
   var box=document.getElementById('ai-chat-messages');
   if(!box) return null;
@@ -5858,6 +5961,153 @@ function _aiAddBubble(text, cls){
   box.appendChild(div);
   box.scrollTop=box.scrollHeight;
   return div;
+}
+
+var _extratoPendingTx = null; // transações aguardando confirmação do usuário
+
+function openExtratoPicker(){
+  if(!isPremium){ openPremiumModal(); return; }
+  var input = document.getElementById('extrato-file-input');
+  if(input) input.click();
+}
+
+function handleExtratoFile(input){
+  var file = input.files[0];
+  if(!file) return;
+  var ext = file.name.split('.').pop().toLowerCase();
+  var maxSizeMb = 8;
+  if(file.size > maxSizeMb*1024*1024){
+    toast('Arquivo muito grande (máx '+maxSizeMb+'MB)');
+    input.value=''; return;
+  }
+
+  _aiAddBubble('📎 '+file.name, 'ai-user');
+  var proc = _aiAddBubble('<span class="extrato-processing">🔎 Lendo seu extrato e categorizando as transações...</span>', 'ai-bot');
+
+  var isImage = file.type.indexOf('image/') === 0;
+  var reader = new FileReader();
+
+  reader.onload = function(e){
+    var payload = {};
+    if(isImage){
+      // Remove o prefixo data:image/...;base64,
+      var base64 = String(e.target.result).split(',')[1];
+      payload.image = base64;
+    } else {
+      payload.text = String(e.target.result);
+    }
+    _sendToExtratoAPI(payload, proc);
+  };
+  reader.onerror = function(){
+    if(proc) proc.remove();
+    _aiAddBubble('Não consegui ler o arquivo. Tente novamente ou use outro formato (OFX, CSV ou foto do extrato).','ai-bot');
+  };
+
+  if(isImage) reader.readAsDataURL(file);
+  else reader.readAsText(file, 'utf-8');
+
+  input.value = '';
+}
+
+async function _sendToExtratoAPI(payload, processingBubble){
+  try{
+    var resp = await fetch('/api/extrato', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    if(processingBubble) processingBubble.remove();
+    if(!resp.ok) throw new Error('API '+resp.status);
+    var data = await resp.json();
+    if(data.error) throw new Error(data.error);
+
+    var txs = data.transactions || [];
+    if(!txs.length){
+      _aiAddBubble('Não encontrei transações legíveis nesse arquivo. Pode tentar outro formato ou enviar um extrato mais recente?','ai-bot');
+      return;
+    }
+
+    _extratoPendingTx = txs;
+    _renderExtratoSummary(txs, data.summary);
+
+  }catch(err){
+    if(processingBubble) processingBubble.remove();
+    _aiAddBubble('Tive um problema ao analisar o extrato. Tente novamente em instantes.','ai-bot');
+    console.warn('Extrato error:', err);
+  }
+}
+
+function _renderExtratoSummary(txs, summary){
+  var box = document.getElementById('ai-chat-messages');
+  if(!box) return;
+
+  var fm = function(v){ return v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); };
+  var catLabel = function(c){
+    var map = {alimentacao:'🍽️ Alimentação',transporte:'🚗 Transporte',moradia:'🏠 Moradia',saude:'💊 Saúde',lazer:'🎮 Lazer',compras:'🛍️ Compras',educacao:'📚 Educação',servicos:'🔧 Serviços',salario:'💼 Salário',investimentos:'📈 Investimentos',outros:'📦 Outros'};
+    return map[c] || c;
+  };
+
+  var listHtml = txs.slice(0,30).map(function(t){
+    var sign = t.type==='in' ? '+' : '−';
+    return '<div class="es-item">'
+      +'<span class="es-item-desc">'+ (t.pessoa ? t.desc+' · '+t.pessoa : t.desc) +'</span>'
+      +'<span class="es-item-val '+t.type+'">'+sign+'R$'+fm(t.val)+'</span>'
+      +'</div>';
+  }).join('');
+
+  var div = document.createElement('div');
+  div.className = 'extrato-summary';
+  div.innerHTML =
+    '<div class="es-head">📊 Encontrei '+ (summary?summary.count:txs.length) +' transações</div>'
+    +'<div class="es-stats">'
+      +'<div class="es-stat in"><div class="es-val">R$'+fm(summary?summary.totalIn:0)+'</div><div class="es-lbl">Receitas</div></div>'
+      +'<div class="es-stat out"><div class="es-val">R$'+fm(summary?summary.totalOut:0)+'</div><div class="es-lbl">Despesas</div></div>'
+    +'</div>'
+    +'<div class="es-list">'+listHtml+'</div>'
+    +'<div class="es-actions">'
+      +'<button class="es-btn cancel" onclick="_cancelExtratoImport(this)">Cancelar</button>'
+      +'<button class="es-btn confirm" onclick="_confirmExtratoImport(this)">✓ Importar tudo</button>'
+    +'</div>';
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function _confirmExtratoImport(btn){
+  if(!_extratoPendingTx || !_extratoPendingTx.length){ return; }
+  var added = 0;
+  _extratoPendingTx.forEach(function(t){
+    state.transactions.push({
+      id: uid(),
+      desc: t.pessoa ? (t.desc+' · '+t.pessoa) : t.desc,
+      val: t.val,
+      type: t.type,
+      cat: t.cat,
+      date: t.date,
+      imported: true
+    });
+    added++;
+  });
+  save(); 
+  try{ renderFinance(); }catch(e){}
+  updateHome();
+  _extratoPendingTx = null;
+
+  // Substitui os botões por uma confirmação
+  var wrap = btn.closest('.extrato-summary');
+  if(wrap){
+    var actions = wrap.querySelector('.es-actions');
+    if(actions) actions.innerHTML = '<div style="color:var(--green);font-weight:800;font-size:12px;text-align:center;width:100%">✓ '+added+' transações importadas!</div>';
+  }
+  toast('✓ '+added+' transações adicionadas ao Finanças!');
+}
+
+function _cancelExtratoImport(btn){
+  _extratoPendingTx = null;
+  var wrap = btn.closest('.extrato-summary');
+  if(wrap){
+    var actions = wrap.querySelector('.es-actions');
+    if(actions) actions.innerHTML = '<div style="color:var(--ink3);font-weight:700;font-size:12px;text-align:center;width:100%">Importação cancelada</div>';
+  }
 }
 
 function _aiBuildContext(){
