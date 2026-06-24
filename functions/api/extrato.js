@@ -42,10 +42,42 @@ export async function onRequestPost(context) {
       generationConfig: { temperature: 0.1, response_mime_type: 'application/json' }
     };
 
-    const gemResp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(geminiBody) });
-    if (!gemResp.ok) {
-      const errText = await gemResp.text();
-      return new Response(JSON.stringify({ error: 'Erro Gemini: ' + gemResp.status, detail: errText }), { status: 502, headers: CORS });
+    // Tenta chamar o Gemini com retry automatico em caso de sobrecarga temporaria.
+    // Codigos 503 (UNAVAILABLE), 429 (rate limit) e 500 sao tentados novamente.
+    const RETRYABLE = [429, 500, 503];
+    const MAX_TRIES = 4;
+    let gemResp = null;
+    let lastErrText = '';
+    let lastStatus = 0;
+
+    for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+      gemResp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(geminiBody) });
+      if (gemResp.ok) break;
+
+      lastStatus = gemResp.status;
+      lastErrText = await gemResp.text();
+
+      // Se nao for um erro temporario, nao adianta tentar de novo
+      if (RETRYABLE.indexOf(gemResp.status) === -1) break;
+
+      // Espera progressiva antes da proxima tentativa: 0.8s, 1.6s, 2.4s
+      if (attempt < MAX_TRIES) {
+        await new Promise(function (r) { setTimeout(r, attempt * 800); });
+      }
+    }
+
+    if (!gemResp || !gemResp.ok) {
+      // Mensagem amigavel para o caso mais comum (servico sobrecarregado)
+      const overloaded = (lastStatus === 503 || lastStatus === 429);
+      const friendly = overloaded
+        ? 'O serviço de IA está temporariamente sobrecarregado. Aguarde alguns minutos e tente novamente.'
+        : 'Não foi possível processar o extrato agora. Tente novamente em instantes.';
+      return new Response(JSON.stringify({
+        error: friendly,
+        overloaded: overloaded,
+        geminiStatus: lastStatus,
+        detail: lastErrText
+      }), { status: 502, headers: CORS });
     }
 
     const data = await gemResp.json();
