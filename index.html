@@ -6001,12 +6001,13 @@ function handleExtratoFile(input){
   var proc = _aiAddBubble('<span class="extrato-processing">🔎 Lendo seu extrato e categorizando as transações...</span>', 'ai-bot');
 
   var isImage = file.type.indexOf('image/') === 0;
+  var isPdf = file.type === 'application/pdf' || ext === 'pdf';
   var reader = new FileReader();
 
   reader.onload = function(e){
     var payload = {};
-    if(isImage){
-      // Remove o prefixo data:image/...;base64,
+    if(isImage || isPdf){
+      // Remove o prefixo data:...;base64,
       var base64 = String(e.target.result).split(',')[1];
       payload.image = base64;
     } else {
@@ -6019,7 +6020,7 @@ function handleExtratoFile(input){
     _aiAddBubble('Não consegui ler o arquivo. Tente novamente ou use outro formato (OFX, CSV ou foto do extrato).','ai-bot');
   };
 
-  if(isImage) reader.readAsDataURL(file);
+  if(isImage || isPdf) reader.readAsDataURL(file);
   else reader.readAsText(file, 'utf-8');
 
   input.value = '';
