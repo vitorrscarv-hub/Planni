@@ -6010,6 +6010,8 @@ function handleExtratoFile(input){
       // Remove o prefixo data:...;base64,
       var base64 = String(e.target.result).split(',')[1];
       payload.image = base64;
+      // Informa o tipo real do arquivo para o backend (PDF, JPEG, PNG, etc.)
+      payload.mime = isPdf ? 'application/pdf' : (file.type || 'image/jpeg');
     } else {
       payload.text = String(e.target.result);
     }
