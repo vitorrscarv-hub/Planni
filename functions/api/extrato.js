@@ -1,5 +1,5 @@
 // Cloudflare Pages Function - POST /api/extrato
-// Recebe { text: "<conteudo do OFX/CSV>" } OU { image: "<base64 sem prefixo>" }
+// Recebe { text: "<conteudo do OFX/CSV>" } OU { image: "<base64 sem prefixo>", mime: "<tipo>" }
 // Devolve { transactions: [...], summary: {...} }
 // A chave do Gemini fica em GEMINI_API_KEY (variavel de ambiente do Cloudflare).
 // O arquivo enviado NUNCA e armazenado - so processado e descartado.
@@ -7,6 +7,9 @@
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Content-Type': 'application/json' };
 
 const PROMPT = 'Voce e um assistente financeiro que analisa extratos bancarios brasileiros (PIX, cartao de credito, debito, TED, boletos, salario). Extraia TODAS as transacoes encontradas no conteudo fornecido. Para cada transacao, identifique: descricao curta e clara, valor (sempre positivo, numero), tipo (in para receita/credito, out para despesa/debito), data no formato YYYY-MM-DD, categoria, e quando for PIX ou TED, tente identificar o nome da pessoa ou empresa envolvida. As categorias possiveis sao: alimentacao, transporte, moradia, saude, lazer, compras, educacao, servicos, salario, investimentos, outros. Regras importantes: nunca invente transacoes que nao estao no texto; se um valor ou data estiver ilegivel, pule essa transacao; PIX recebido e credito (in), PIX enviado e debito (out); pagamento de fatura de cartao dentro do extrato da conta corrente deve ser categoria servicos; salario e tipo in categoria salario. Responda SOMENTE com JSON valido, sem texto antes ou depois, sem markdown, no formato exato: {"transactions":[{"desc":"texto curto","val":99.90,"type":"in ou out","cat":"categoria","date":"YYYY-MM-DD","pessoa":"nome ou null"}]}. Se nao encontrar nenhuma transacao valida, devolva {"transactions":[]}.';
+
+// Tipos de arquivo aceitos para envio multimodal ao Gemini
+const ALLOWED_MIMES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
 
 export async function onRequestPost(context) {
   const { request, env } = context;
@@ -17,6 +20,9 @@ export async function onRequestPost(context) {
     const body = await request.json();
     const text = body && body.text;
     const image = body && body.image;
+    // Tipo real do arquivo informado pelo frontend; se ausente, assume JPEG por compatibilidade
+    let mime = body && body.mime ? String(body.mime) : 'image/jpeg';
+    if (ALLOWED_MIMES.indexOf(mime) === -1) mime = 'image/jpeg';
     if (!text && !image) return new Response(JSON.stringify({ error: 'Nenhum conteudo enviado.' }), { status: 400, headers: CORS });
 
     // Limite de segurança: corta textos muito grandes para não estourar o limite da API
@@ -26,7 +32,7 @@ export async function onRequestPost(context) {
     if (safeText) {
       parts.push({ text: PROMPT + '\n\nCONTEUDO DO EXTRATO:\n' + safeText });
     } else {
-      parts.push({ inline_data: { mime_type: 'image/jpeg', data: image } });
+      parts.push({ inline_data: { mime_type: mime, data: image } });
       parts.push({ text: PROMPT });
     }
 
