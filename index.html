@@ -6014,6 +6014,8 @@ function handleExtratoFile(input){
       payload.mime = isPdf ? 'application/pdf' : (file.type || 'image/jpeg');
     } else {
       payload.text = String(e.target.result);
+      // Nome do arquivo ajuda o parser nativo a detectar OFX vs CSV
+      payload.filename = file.name || '';
     }
     _sendToExtratoAPI(payload, proc);
   };
@@ -6036,9 +6038,21 @@ async function _sendToExtratoAPI(payload, processingBubble){
       body: JSON.stringify(payload)
     });
     if(processingBubble) processingBubble.remove();
-    if(!resp.ok) throw new Error('API '+resp.status);
-    var data = await resp.json();
-    if(data.error) throw new Error(data.error);
+
+    // Le o corpo SEMPRE, mesmo em erro, para aproveitar a mensagem do backend
+    var data = {};
+    try{ data = await resp.json(); }catch(e){ data = {}; }
+
+    // Servico de IA sobrecarregado (Gemini 503/429) - mensagem clara e amigavel
+    if(data && data.overloaded){
+      _aiAddBubble('⏳ '+(data.error || 'O serviço de IA está sobrecarregado. Tente novamente em alguns minutos.'),'ai-bot');
+      return;
+    }
+    if(!resp.ok || (data && data.error)){
+      _aiAddBubble((data && data.error) ? data.error : 'Tive um problema ao analisar o extrato. Tente novamente em instantes.','ai-bot');
+      console.warn('Extrato error:', resp.status, data);
+      return;
+    }
 
     var txs = data.transactions || [];
     if(!txs.length){
