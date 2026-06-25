@@ -660,6 +660,20 @@ input[list]{background-image:none}
 /* ══════ CHAT IA FLUTUANTE ══════ */
 #fab-main{width:72px;height:72px;border-radius:20px;background:linear-gradient(135deg,#667eea,#764ba2);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 32px rgba(118,75,162,.45),0 0 18px 2px rgba(118,75,162,.35),0 0 0 1px rgba(255,255,255,.12) inset;transition:transform .2s}
 #fab-main:active{transform:scale(.92)}
+
+#splash-screen{position:fixed;inset:0;z-index:9999;background:linear-gradient(160deg,#eef1ff 0%,#e8ecff 30%,#eae6ff 70%,#f3eeff 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px;transition:opacity .45s ease}
+#splash-screen.hide{opacity:0;pointer-events:none}
+.sp-wrap{width:120px;height:120px;border-radius:30px;background:linear-gradient(135deg,#8ab4f8 0%,#6c63ff 55%,#a78bf0 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 16px 44px rgba(108,99,255,.4),0 0 0 1px rgba(255,255,255,.18) inset;animation:spBreathe 3s ease-in-out infinite}
+@keyframes spBreathe{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+.sp-wrap svg{width:72px;height:72px;overflow:visible}
+.sp-draw{fill:none;stroke:#fff;stroke-width:5;stroke-linecap:round;stroke-linejoin:round;animation:spDraw 3s ease-in-out infinite}
+.sp-bar{fill:#fff;opacity:0;transform-origin:50% 58px;animation:spBar 3s ease-in-out infinite}
+.sp-bar.b2{animation-delay:.12s}.sp-bar.b3{animation-delay:.24s}.sp-bar.b4{animation-delay:.36s}
+@keyframes spDraw{0%{stroke-dashoffset:var(--len)}35%{stroke-dashoffset:0}85%{stroke-dashoffset:0;opacity:1}97%{stroke-dashoffset:0;opacity:0}100%{stroke-dashoffset:var(--len);opacity:0}}
+@keyframes spBar{0%,38%{opacity:0;transform:scaleY(0)}52%{opacity:1;transform:scaleY(1.12)}58%{transform:scaleY(1)}85%{opacity:1;transform:scaleY(1)}97%,100%{opacity:0;transform:scaleY(1)}}
+.sp-name{font-size:24px;font-weight:800;letter-spacing:-.02em;color:#1a1c3a}
+@media (prefers-reduced-motion:reduce){.sp-wrap,.sp-draw,.sp-bar{animation:none}.sp-draw{stroke-dashoffset:0}.sp-bar{opacity:1}}
+
 #ai-chat-sheet{position:fixed;inset:0;z-index:600;background:rgba(13,31,60,.45);backdrop-filter:blur(8px);display:none;align-items:flex-end;justify-content:center}
 #ai-chat-sheet.show{display:flex}
 .ai-chat-panel{background:var(--white);border-radius:24px 24px 0 0;width:100%;max-width:480px;height:78vh;display:flex;flex-direction:column;animation:slideUp .3s ease;border-top:1.5px solid var(--border);overflow:hidden}
@@ -715,6 +729,29 @@ input[list]{background-image:none}
 </style>
 </head>
 <body>
+
+<!-- SPLASH / LOADING (cobre tudo até auth decidir) -->
+<div id="splash-screen">
+  <div class="sp-wrap">
+    <svg viewBox="0 0 100 100">
+      <path class="sp-draw" id="sp-bubble" d="M22 24 H78 Q86 24 86 32 V60 Q86 68 78 68 H44 L32 80 L33 68 H22 Q14 68 14 60 V32 Q14 24 22 24 Z"/>
+      <rect class="sp-bar b1" x="30" y="48" width="7" height="10" rx="2"/>
+      <rect class="sp-bar b2" x="42" y="42" width="7" height="16" rx="2"/>
+      <rect class="sp-bar b3" x="54" y="38" width="7" height="20" rx="2"/>
+      <rect class="sp-bar b4" x="66" y="32" width="7" height="26" rx="2"/>
+    </svg>
+  </div>
+  <div class="sp-name">Planni</div>
+</div>
+<script>
+(function(){
+  var p=document.getElementById('sp-bubble');
+  if(p){var len=Math.ceil(p.getTotalLength());
+    document.querySelectorAll('.sp-draw').forEach(function(el){el.style.setProperty('--len',len);el.style.strokeDasharray=len;el.style.strokeDashoffset=len;});}
+})();
+function hideSplash(){var s=document.getElementById('splash-screen');if(s){s.classList.add('hide');setTimeout(function(){s.style.display='none';},500);}}
+</script>
+
 <div id="app">
 <div id="header">
   <div><div class="logo">Planni</div></div>
@@ -1629,7 +1666,7 @@ input[list]{background-image:none}
 </div>
 
 <!-- FAB EXPANDÍVEL -->
-<div id="fab-container">
+<div id="fab-container" style="display:none">
   <!-- Botão único: abre o assistente IA (cria transações, tarefas, eventos e notas por conversa) -->
   <button id="fab-main" onclick="openAIChat()" aria-label="Conversar com a IA">
     <img src="/apple-touch-icon.png" width="60" height="60" style="object-fit:contain;display:block;border-radius:14px">
@@ -1833,9 +1870,14 @@ var firebaseConfig = {
   messagingSenderId: "917839010005",
   appId: "1:917839010005:web:2822bb59376d5486462a5c"
 };
-firebase.initializeApp(firebaseConfig);
-var db   = firebase.firestore();
-var auth = firebase.auth();
+var db, auth;
+try {
+  firebase.initializeApp(firebaseConfig);
+  db   = firebase.firestore();
+  auth = firebase.auth();
+} catch(e) {
+  console.error('Firebase init falhou:', e);
+}
 // ═══════════════════════════════════════
 // CONSTANTS & STATE
 // ═══════════════════════════════════════
@@ -4942,20 +4984,25 @@ function activatePremiumCode(){
 // INIT
 // ═══════════════════════════════════════
 function init(){
-  load();
-  // Auth FIRST — decides whether to show login or app
-  try{ initAuth(); }catch(e){ console.error('initAuth failed:', e); showLoginScreen(); }
-
-  // Safety net: if after 3s neither screen is visible, show login
+  // Safety net PRIMEIRO — registrado antes de qualquer coisa que possa falhar
+  // (ex: Firebase não carregar). Garante que o splash nunca prenda o usuário.
   setTimeout(function(){
     var ap=document.getElementById('app');
     var ls=document.getElementById('login-screen');
     var appVisible = ap && getComputedStyle(ap).display !== 'none';
     var loginVisible = ls && getComputedStyle(ls).display !== 'none';
     if(!appVisible && !loginVisible){
-      showLoginScreen();
+      try{ showLoginScreen(); }catch(e){ try{ hideSplash(); }catch(e2){} }
+    } else {
+      try{ hideSplash(); }catch(e){}
     }
-  }, 3000);
+  }, 4000);
+
+  load();
+  // Auth FIRST — decides whether to show login or app
+  try{ initAuth(); }catch(e){ console.error('initAuth failed:', e); showLoginScreen(); }
+
+
 
   // Everything else wrapped so one error can't blank the app
   try{
@@ -5135,6 +5182,11 @@ function backToLoginFromVerify(){
 }
 
 function initAuth(){
+  // Se o Firebase não carregou (ex: offline), cai direto pro login
+  if(typeof firebase==='undefined' || !auth){
+    showLoginScreen();
+    return;
+  }
   // STEP 1: Set persistence synchronously before anything else
   auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(){});
 
@@ -5212,16 +5264,20 @@ function initAuth(){
   });
 }
 function showLoginScreen(){
+  try{hideSplash();}catch(e){}
   var ls=document.getElementById('login-screen');
   var ap=document.getElementById('app');
   if(ls) ls.style.display='flex';
   if(ap) ap.style.display='none';
+  var fab=document.getElementById('fab-container'); if(fab) fab.style.display='none';
 }
 function hideLoginScreen(){
+  try{hideSplash();}catch(e){}
   var ls=document.getElementById('login-screen');
   var ap=document.getElementById('app');
   if(ls) ls.style.display='none';
   if(ap) ap.style.display='flex';
+  var fab=document.getElementById('fab-container'); if(fab) fab.style.display='flex';
 }
 function updateUserUI(){
   if(!currentUser) return;
