@@ -1,8 +1,14 @@
 // Cloudflare Pages Function - POST /api/extrato
-// Recebe { text: "<conteudo do OFX/CSV>" } OU { image: "<base64 sem prefixo>", mime: "<tipo>" }
+// Recebe { text: "<conteudo do OFX/CSV>", filename: "<nome>" } OU { image: "<base64 sem prefixo>", mime: "<tipo>" }
 // Devolve { transactions: [...], summary: {...} }
 // A chave do Gemini fica em GEMINI_API_KEY (variavel de ambiente do Cloudflare).
 // O arquivo enviado NUNCA e armazenado - so processado e descartado.
+//
+// ARQUITETURA EM CAMADAS:
+//   Camada 1: parser nativo OFX/CSV (parser.js) - sem IA, custo zero, 100% confiavel.
+//   Camada 2: Gemini com retry - usado para PDF/imagem ou texto que o parser nao entendeu.
+
+import { parseLocal } from './parser.js';
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Content-Type': 'application/json' };
 
@@ -25,7 +31,23 @@ export async function onRequestPost(context) {
     if (ALLOWED_MIMES.indexOf(mime) === -1) mime = 'image/jpeg';
     if (!text && !image) return new Response(JSON.stringify({ error: 'Nenhum conteudo enviado.' }), { status: 400, headers: CORS });
 
-    // Limite de segurança: corta textos muito grandes para não estourar o limite da API
+    // ===== CAMADA 1: parser nativo OFX/CSV (sem IA) =====
+    // Se veio texto (OFX/CSV), tenta ler localmente. Custo zero, instantaneo, nunca da 503.
+    if (text) {
+      try {
+        const filename = body && body.filename ? String(body.filename) : '';
+        const local = parseLocal(String(text), filename);
+        if (local && local.transactions && local.transactions.length) {
+          // Sucesso na Camada 1 - nem chega a usar a IA
+          return new Response(JSON.stringify(local), { status: 200, headers: CORS });
+        }
+      } catch (e) {
+        // Se o parser falhar por qualquer motivo, segue para a IA (Camada 2)
+      }
+    }
+
+    // ===== CAMADA 2: Gemini (PDF, imagem, ou texto que o parser nao entendeu) =====
+    // Limite de seguranca: corta textos muito grandes para nao estourar o limite da API
     const safeText = text ? String(text).slice(0, 60000) : null;
 
     const parts = [];
