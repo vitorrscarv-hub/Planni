@@ -6459,6 +6459,20 @@ function _stopChatVoice(autoSend){
 // Atalho nativo: cria transacao direto do texto, SEM chamar a IA.
 // Cobre comandos como "gastei R$150 com combustivel", "recebi 2000 de salario".
 // Retorna true se tratou o comando localmente (e nao precisa da IA).
+function _palavraParaNumero(txt){
+  var u={'zero':0,'um':1,'uma':1,'dois':2,'duas':2,'tres':3,'três':3,'quatro':4,'cinco':5,'seis':6,'sete':7,'oito':8,'nove':9,'dez':10,'onze':11,'doze':12,'treze':13,'quatorze':14,'catorze':14,'quinze':15,'dezesseis':16,'dezessete':17,'dezoito':18,'dezenove':19,'vinte':20,'trinta':30,'quarenta':40,'cinquenta':50,'sessenta':60,'setenta':70,'oitenta':80,'noventa':90,'cem':100,'cento':100,'duzentos':200,'trezentos':300,'quatrocentos':400,'quinhentos':500,'mil':1000};
+  var palavras=txt.toLowerCase().split(/\s+e\s+|\s+/);
+  var total=0, achou=false;
+  palavras.forEach(function(p){
+    if(u[p]!==undefined){ 
+      if(p==='mil'){ total=(total||1)*1000; } 
+      else total+=u[p]; 
+      achou=true; 
+    }
+  });
+  return achou ? total : null;
+}
+
 function _tryLocalTransaction(msg){
   var cmd = msg.toLowerCase();
 
@@ -6475,6 +6489,21 @@ function _tryLocalTransaction(msg){
       state.transactions.unshift({id:uid(),desc:descFinal,val:val,type:'out',cat:cat,date:today()});
       save(); renderFinance(); updateHome();
       _aiAddBubble('✓ Registrei R$'+fm(val)+' em '+getCatInfo(cat).label+' ('+descFinal+').','ai-bot');
+      return true;
+    }
+  }
+
+  // Despesa com valor por extenso: "comprei um biscoito de seis reais"
+  var saidaExt = cmd.match(/(?:gastei|paguei|comprei|custou|saiu)\s+(.*?)\s+(?:de|por|a)\s+([a-zãçéêíóôú\s]+?)\s+reais?/);
+  if(saidaExt){
+    var valExt = _palavraParaNumero(saidaExt[2]);
+    if(valExt && valExt>0){
+      var d = (saidaExt[1]||'').replace(/\b(um|uma|uns|umas|o|a|os|as)\b/gi,'').replace(/\s{2,}/g,' ').trim();
+      var catExt = detectCat(cmd+' '+d);
+      var descE = d ? d.charAt(0).toUpperCase()+d.slice(1) : 'Despesa';
+      state.transactions.unshift({id:uid(),desc:descE,val:valExt,type:'out',cat:catExt,date:today()});
+      save(); renderFinance(); updateHome();
+      _aiAddBubble('✓ Registrei R$'+fm(valExt)+' em '+getCatInfo(catExt).label+' ('+descE+').','ai-bot');
       return true;
     }
   }
@@ -6511,7 +6540,9 @@ async function aiChatSend(){
 
   // ATALHO NATIVO: comandos simples de transacao nao passam pela IA (instantaneo, sem 503)
   if(_tryLocalTransaction(msg)){
+    // Marca no historico que JA foi executado, para a IA nunca reprocessar este comando
     _aiChatHistory.push({role:'user',text:msg});
+    _aiChatHistory.push({role:'model',text:'(transação já registrada pelo app, nenhuma ação adicional necessária)'});
     return;
   }
 
