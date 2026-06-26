@@ -6456,6 +6456,48 @@ function _stopChatVoice(autoSend){
   }
 }
 
+// Atalho nativo: cria transacao direto do texto, SEM chamar a IA.
+// Cobre comandos como "gastei R$150 com combustivel", "recebi 2000 de salario".
+// Retorna true se tratou o comando localmente (e nao precisa da IA).
+function _tryLocalTransaction(msg){
+  var cmd = msg.toLowerCase();
+
+  // Despesa: gastei/paguei/comprei/pix/ted... <valor> <descricao>
+  var saidaM = cmd.match(/(?:gastei|paguei|comprei|passei|cartão|cartao|pix de?|ted de?|transferi|enviei|mandei|debitou|cobrou|saiu|gastar)\s+(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais?)?\s*(?:com|de|no|na|em|pra|para)?\s*(.*)?/);
+  if(saidaM){
+    var val = parseFloat(saidaM[1].replace(/\./g,'').replace(',','.'));
+    if(!isNaN(val) && val>0){
+      var descRaw = (saidaM[2]||'').trim();
+      // Remove palavras de tempo que sobram no fim ("hoje", "ontem", "agora")
+      descRaw = descRaw.replace(/\b(hoje|ontem|agora|de manhã|de manha|à tarde|a tarde|à noite|a noite)\b/gi,'').replace(/\s{2,}/g,' ').trim();
+      var cat = /pix|ted|transferi|enviei/.test(cmd) ? 'pix' : detectCat(cmd+' '+descRaw);
+      var descFinal = descRaw ? descRaw.charAt(0).toUpperCase()+descRaw.slice(1) : 'Despesa';
+      state.transactions.unshift({id:uid(),desc:descFinal,val:val,type:'out',cat:cat,date:today()});
+      save(); renderFinance(); updateHome();
+      _aiAddBubble('✓ Registrei R$'+fm(val)+' em '+getCatInfo(cat).label+' ('+descFinal+').','ai-bot');
+      return true;
+    }
+  }
+
+  // Receita: recebi/ganhei/salario/entrou... <valor>
+  var entM = cmd.match(/(?:recebi|salário de?|salario de?|ganhei|entrou|depositou|caiu)\s+(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais?)?\s*(?:de|do|da)?\s*(.*)?/);
+  if(entM){
+    var val2 = parseFloat(entM[1].replace(/\./g,'').replace(',','.'));
+    if(!isNaN(val2) && val2>0){
+      var d2 = (entM[2]||'').trim();
+      var ehSalario = /salário|salario/.test(cmd);
+      var desc2 = ehSalario ? 'Salário' : (d2 ? d2.charAt(0).toUpperCase()+d2.slice(1) : 'Receita');
+      var cat2 = ehSalario ? 'salario' : 'outros';
+      state.transactions.unshift({id:uid(),desc:desc2,val:val2,type:'in',cat:cat2,date:today()});
+      save(); renderFinance(); updateHome();
+      _aiAddBubble('✓ Registrei entrada de R$'+fm(val2)+' ('+desc2+').','ai-bot');
+      return true;
+    }
+  }
+
+  return false;
+}
+
 async function aiChatSend(){
   // Se estiver gravando, para antes de enviar
   if(_chatRecording) _stopChatVoice();
@@ -6466,6 +6508,12 @@ async function aiChatSend(){
   input.value='';
   _updateChatBtn();
   _aiAddBubble(msg,'ai-user');
+
+  // ATALHO NATIVO: comandos simples de transacao nao passam pela IA (instantaneo, sem 503)
+  if(_tryLocalTransaction(msg)){
+    _aiChatHistory.push({role:'user',text:msg});
+    return;
+  }
 
   var typing=_aiAddBubble('digitando...','ai-typing');
 
