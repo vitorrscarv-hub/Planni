@@ -6606,6 +6606,41 @@ function _tryLocalQuery(msg){
     return 'Seu saldo'+per+' é de R$'+fm(saldo)+' (R$'+fm(ins)+' em receitas − R$'+fm(outs)+' em despesas).';
   }
 
+  // "qual a media de gastos [em X]"
+  if(/m[ée]dia\s+(de\s+)?(gastos?|despesas?|gasto)/.test(cmd)){
+    var termoM = null;
+    var tmM = cmd.match(/(?:com|no|na|em|de)\s+([a-zãàáâçéêíóôõú]+)\s*\??$/);
+    if(tmM && ['gastos','gasto','despesas','despesa'].indexOf(tmM[1])===-1) termoM = tmM[1];
+    var baseM = txs.filter(function(t){ return t.type==='out'; });
+    if(termoM){
+      baseM = baseM.filter(function(t){
+        return (t.cat && t.cat.indexOf(termoM)!==-1) || (t.desc && t.desc.toLowerCase().indexOf(termoM)!==-1);
+      });
+    }
+    if(!baseM.length) return termoM ? ('Não encontrei despesas com '+termoM+'.') : 'Não encontrei despesas registradas.';
+    var somaM = baseM.reduce(function(s,t){ return s+t.val; },0);
+    var med = somaM / baseM.length;
+    return 'A média de gastos'+(termoM?' com '+termoM:'')+' é R$'+fm(med)+' por transação ('+baseM.length+' transações, total R$'+fm(somaM)+').';
+  }
+
+  // "qual o maior/menor gasto [em X]"
+  var mmM = cmd.match(/(maior|menor)\s+(gasto|despesa|valor)/);
+  if(mmM){
+    var termoMM = null;
+    var tmMM = cmd.match(/(?:com|no|na|em|de)\s+([a-zãàáâçéêíóôõú]+)\s*\??$/);
+    if(tmMM && ['gasto','despesa','valor'].indexOf(tmMM[1])===-1) termoMM = tmMM[1];
+    var baseMM = txs.filter(function(t){ return t.type==='out'; });
+    if(termoMM){
+      baseMM = baseMM.filter(function(t){
+        return (t.cat && t.cat.indexOf(termoMM)!==-1) || (t.desc && t.desc.toLowerCase().indexOf(termoMM)!==-1);
+      });
+    }
+    if(!baseMM.length) return 'Não encontrei despesas'+(termoMM?' com '+termoMM:'')+'.';
+    var ordenada = baseMM.slice().sort(function(a,b){ return mmM[1]==='maior' ? b.val-a.val : a.val-b.val; });
+    var alvo = ordenada[0];
+    return 'Seu '+mmM[1]+' gasto'+(termoMM?' com '+termoMM:'')+' foi R$'+fm(alvo.val)+' ('+alvo.desc+', em '+alvo.date+').';
+  }
+
   return null;
 }
 
@@ -6617,6 +6652,68 @@ function _localReply(text){
     if(typing) typing.remove();
     _aiAddBubble(text,'ai-bot');
   }, delay);
+}
+
+// Criacao local de tarefa / nota / evento, SEM IA.
+// Retorna a string de confirmacao, ou null se nao reconheceu o comando.
+function _tryLocalCreate(msg){
+  var cmd = msg.toLowerCase();
+
+  // ----- TAREFA: "crie uma tarefa [com o nome de] X" -----
+  var tarM = cmd.match(/(?:crie|criar|adicione|adicionar|nova|novo|faz|fazer|bota|colar?)\s+(?:uma?\s+)?tarefa(?:\s+(?:com o nome de|chamada|de|:|para|pra))?\s*(.*)/);
+  if(tarM){
+    var txt = (tarM[1]||'').trim();
+    // pega o texto original (preserva acentos/maiusculas) a partir da posicao
+    var origMatch = msg.match(/tarefa(?:\s+(?:com o nome de|chamada|de|:|para|pra))?\s*(.*)/i);
+    if(origMatch && origMatch[1]) txt = origMatch[1].trim();
+    if(txt){
+      if(!isPremium){
+        var ativas = state.tasks.filter(function(t){ return !t.done; });
+        if(ativas.length >= (typeof PREMIUM_TASK_LIMIT!=='undefined'?PREMIUM_TASK_LIMIT:10)){
+          return 'Você atingiu o limite de tarefas do plano gratuito. Considere o Premium para tarefas ilimitadas.';
+        }
+      }
+      var urgente = /urgente/.test(cmd);
+      var importante = /importante/.test(cmd) || !urgente;
+      state.tasks.unshift({ id:uid(), text:txt.charAt(0).toUpperCase()+txt.slice(1), done:false, importante:importante, urgente:urgente });
+      save(); renderTasks(); updateHome();
+      return '✓ Criei a tarefa "'+txt+'".';
+    }
+  }
+
+  // ----- NOTA: "adicione uma nota [:] X" -----
+  var notaM = cmd.match(/(?:crie|criar|adicione|adicionar|nova|novo|anote|anotar|escreva)\s+(?:uma?\s+)?nota(?:\s*(?::|com o nome de|chamada|de|sobre))?\s*(.*)/);
+  if(notaM){
+    var origN = msg.match(/nota(?:\s*(?::|com o nome de|chamada|de|sobre))?\s*(.*)/i);
+    var conteudo = (origN && origN[1]) ? origN[1].trim() : (notaM[1]||'').trim();
+    if(conteudo){
+      var titulo = conteudo.length>40 ? conteudo.slice(0,40)+'…' : conteudo;
+      state.notes.unshift({ id:uid(), title:titulo.charAt(0).toUpperCase()+titulo.slice(1), body:'', date:new Date().toISOString(), folderId:null });
+      save(); if(typeof renderNotes==='function') renderNotes(); updateHome();
+      return '✓ Criei a nota "'+titulo+'".';
+    }
+  }
+
+  // ----- EVENTO: "crie um evento X amanha as 15h" / "reuniao hoje as 9h" -----
+  var evtM = cmd.match(/(?:crie|criar|adicione|adicionar|agende|agendar|marque|marcar)\s+(?:um\s+)?(?:evento|compromisso|reuni[ãa]o)\s+(.*?)\s+(?:às|as|para as|pra)\s+(\d{1,2})(?:[:h](\d{2}))?/);
+  if(evtM){
+    var origE = msg.match(/(?:evento|compromisso|reuni[ãa]o)\s+(.*?)\s+(?:às|as|para as|pra)\s+\d/i);
+    var titEv = (origE && origE[1]) ? origE[1].trim() : (evtM[1]||'Evento').trim();
+    // Remove palavras de tempo que vazam para o titulo (sem \b por causa dos acentos)
+    titEv = titEv.replace(/(^|\s)(amanhã|amanha|hoje|depois de amanhã|depois de amanha|de manhã|de manha|à tarde|a tarde|à noite|a noite)(\s|$)/gi,' ').replace(/\s{2,}/g,' ').trim();
+    if(!titEv) titEv = 'Evento';
+    var hh = evtM[2].padStart(2,'0');
+    var mm = (evtM[3]||'00').padStart(2,'0');
+    var dEv = new Date();
+    if(/amanhã|amanha/.test(cmd)) dEv.setDate(dEv.getDate()+1);
+    if(/depois de amanhã|depois de amanha/.test(cmd)) dEv.setDate(dEv.getDate()+2);
+    state.events.push({ id:uid(), title:titEv.charAt(0).toUpperCase()+titEv.slice(1), date:dEv.toISOString().slice(0,10), time:hh+':'+mm, color:'#2d6c97', remind:15 });
+    save(); if(typeof renderEvents==='function') renderEvents(); updateHome();
+    var quando = /amanhã|amanha/.test(cmd) ? 'amanhã' : 'hoje';
+    return '✓ Agendei "'+titEv+'" para '+quando+' às '+hh+':'+mm+'.';
+  }
+
+  return null;
 }
 
 async function aiChatSend(){
@@ -6636,6 +6733,15 @@ async function aiChatSend(){
     _localReply(localAns);
     _aiChatHistory.push({role:'user',text:msg});
     _aiChatHistory.push({role:'model',text:localAns});
+    return;
+  }
+
+  // CRIACAO LOCAL: tarefa, nota e evento criados pelo app, sem IA
+  var createAns = _tryLocalCreate(msg);
+  if(createAns){
+    _localReply(createAns);
+    _aiChatHistory.push({role:'user',text:msg});
+    _aiChatHistory.push({role:'model',text:'(item já criado pelo app, nenhuma ação adicional necessária)'});
     return;
   }
 
