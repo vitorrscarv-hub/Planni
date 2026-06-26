@@ -6508,6 +6508,28 @@ function _tryLocalTransaction(msg){
     }
   }
 
+  // Despesa com valor por extenso em qualquer posicao: "gastei seis reais com biscoito" / "comprei um biscoito de seis reais"
+  if(/(?:gastei|paguei|comprei|custou|saiu|gastar)/.test(cmd) && /reais?/.test(cmd)){
+    // procura "<numero por extenso> reais"
+    var extMatch = cmd.match(/((?:zero|um|uma|dois|duas|tr[êe]s|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|treze|quatorze|catorze|quinze|dezesseis|dezessete|dezoito|dezenove|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|cem|cento|duzentos|trezentos|quatrocentos|quinhentos|mil)(?:\s+e\s+\w+)*)\s+reais?/);
+    if(extMatch){
+      var valExt2 = _palavraParaNumero(extMatch[1]);
+      if(valExt2 && valExt2>0){
+        // descricao = o que vem depois de "com/de/no/na/em" OU o que sobra
+        var descX = '';
+        var dm = cmd.match(/(?:com|de|no|na|em|pra|para)\s+([a-zãàáâçéêíóôõú\s]+?)(?:\s+(?:reais?|hoje|ontem|agora)|$)/);
+        if(dm) descX = dm[1].trim();
+        descX = descX.replace(extMatch[1],'').replace(/\b(um|uma|uns|umas|o|a|os|as|de|com|reais?)\b/gi,'').replace(/\s{2,}/g,' ').trim();
+        var catX = detectCat(cmd);
+        var descFin = descX ? descX.charAt(0).toUpperCase()+descX.slice(1) : 'Despesa';
+        state.transactions.unshift({id:uid(),desc:descFin,val:valExt2,type:'out',cat:catX,date:today()});
+        save(); renderFinance(); updateHome();
+        _aiAddBubble('✓ Registrei R$'+fm(valExt2)+' em '+getCatInfo(catX).label+' ('+descFin+').','ai-bot');
+        return true;
+      }
+    }
+  }
+
   // Receita: recebi/ganhei/salario/entrou... <valor>
   var entM = cmd.match(/(?:recebi|salário de?|salario de?|ganhei|entrou|depositou|caiu)\s+(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais?)?\s*(?:de|do|da)?\s*(.*)?/);
   if(entM){
@@ -6527,6 +6549,76 @@ function _tryLocalTransaction(msg){
   return false;
 }
 
+// Calculadora local: responde perguntas de gasto/saldo SEM IA, somando state.transactions.
+// Retorna a string da resposta, ou null se nao for uma pergunta que sabemos calcular.
+function _tryLocalQuery(msg){
+  var cmd = msg.toLowerCase();
+  var txs = state.transactions || [];
+  if(!txs.length) return null;
+
+  var thisMonth = today().slice(0,7);
+  var inMonth = function(t){ return t.date && t.date.slice(0,7)===thisMonth; };
+
+  // "quanto gastei [no/com X] [esse mes]" - total de despesas, opcional por categoria/termo
+  if(/quanto\s+(gastei|gasto|paguei|despesas?)/.test(cmd)){
+    var soMes = /(esse|este|do)\s+m[êe]s|mensal/.test(cmd);
+    var base = txs.filter(function(t){ return t.type==='out' && (!soMes || inMonth(t)); });
+
+    // tenta filtrar por categoria ou termo citado
+    var termo = null;
+    var tm = cmd.match(/(?:com|no|na|em|de)\s+([a-zãàáâçéêíóôõú]+)/);
+    if(tm) termo = tm[1];
+    // ignora palavras de tempo como "termo"
+    if(termo && ['esse','este','mes','mês','hoje','ontem'].indexOf(termo)!==-1) termo=null;
+
+    var filtrada = base, rotulo = soMes ? 'neste mês' : 'no total';
+    if(termo){
+      filtrada = base.filter(function(t){
+        return (t.cat && t.cat.indexOf(termo)!==-1) ||
+               (t.desc && t.desc.toLowerCase().indexOf(termo)!==-1);
+      });
+      rotulo = 'com '+termo+(soMes?' neste mês':'');
+    }
+    if(!filtrada.length){
+      return termo ? ('Não encontrei despesas '+rotulo+'.') : 'Não encontrei despesas registradas.';
+    }
+    var total = filtrada.reduce(function(s,t){ return s+t.val; },0);
+    return 'Você gastou R$'+fm(total)+' '+rotulo+' ('+filtrada.length+' '+(filtrada.length===1?'transação':'transações')+').';
+  }
+
+  // "quanto recebi [esse mes]"
+  if(/quanto\s+(recebi|ganhei|entrou|de receita)/.test(cmd)){
+    var soMesR = /(esse|este|do)\s+m[êe]s/.test(cmd);
+    var receitas = txs.filter(function(t){ return t.type==='in' && (!soMesR || inMonth(t)); });
+    if(!receitas.length) return 'Não encontrei receitas registradas'+(soMesR?' neste mês':'')+'.';
+    var totalR = receitas.reduce(function(s,t){ return s+t.val; },0);
+    return 'Você recebeu R$'+fm(totalR)+(soMesR?' neste mês':' no total')+' ('+receitas.length+' '+(receitas.length===1?'entrada':'entradas')+').';
+  }
+
+  // "qual meu saldo" - receitas menos despesas
+  if(/(qual|meu)\s+.*saldo|saldo\s+(atual|do m[êe]s)?/.test(cmd) || /^saldo/.test(cmd)){
+    var soMesS = /(esse|este|do)\s+m[êe]s/.test(cmd);
+    var rel = txs.filter(function(t){ return !soMesS || inMonth(t); });
+    var ins = rel.filter(function(t){return t.type==='in';}).reduce(function(s,t){return s+t.val;},0);
+    var outs = rel.filter(function(t){return t.type==='out';}).reduce(function(s,t){return s+t.val;},0);
+    var saldo = ins-outs;
+    var per = soMesS?' neste mês':'';
+    return 'Seu saldo'+per+' é de R$'+fm(saldo)+' (R$'+fm(ins)+' em receitas − R$'+fm(outs)+' em despesas).';
+  }
+
+  return null;
+}
+
+// Exibe uma resposta local com um pequeno atraso natural (indicador "digitando").
+function _localReply(text){
+  var typing = _aiAddBubble('digitando...','ai-typing');
+  var delay = 1400 + Math.floor(Math.random()*1400); // 1,4s a 2,8s
+  setTimeout(function(){
+    if(typing) typing.remove();
+    _aiAddBubble(text,'ai-bot');
+  }, delay);
+}
+
 async function aiChatSend(){
   // Se estiver gravando, para antes de enviar
   if(_chatRecording) _stopChatVoice();
@@ -6537,6 +6629,15 @@ async function aiChatSend(){
   input.value='';
   _updateChatBtn();
   _aiAddBubble(msg,'ai-user');
+
+  // CALCULADORA LOCAL: perguntas de gasto/saldo respondidas pelo proprio app, sem IA
+  var localAns = _tryLocalQuery(msg);
+  if(localAns){
+    _localReply(localAns);
+    _aiChatHistory.push({role:'user',text:msg});
+    _aiChatHistory.push({role:'model',text:localAns});
+    return;
+  }
 
   // ATALHO NATIVO: comandos simples de transacao nao passam pela IA (instantaneo, sem 503)
   if(_tryLocalTransaction(msg)){
