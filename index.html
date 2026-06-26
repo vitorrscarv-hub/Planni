@@ -468,22 +468,24 @@ input[list]{background-image:none}
 [data-theme="dark"] input,[data-theme="dark"] textarea,[data-theme="dark"] select{background:#fff;border-color:#d0e2f5;color:#0d1f3c}
 [data-theme="dark"] select option{background:#fff;color:#0d1f3c}
 /* LOGIN */
-#login-screen{position:fixed;top:0;left:0;right:0;bottom:0;z-index:1000;background:linear-gradient(135deg,#0d1f3c,#1a3a6c);display:none;flex-direction:column;align-items:center;justify-content:center;padding:32px}
-.login-logo{font-family:var(--font-sf);font-size:32px;font-weight:900;color:#fff;letter-spacing:.04em;margin-bottom:4px}
-.login-sub{font-size:13px;color:rgba(255,255,255,.5);letter-spacing:.1em;margin-bottom:36px}
-.login-card{background:rgba(255,255,255,.07);backdrop-filter:blur(20px);border:1.5px solid rgba(255,255,255,.12);border-radius:28px;padding:28px;width:100%;max-width:380px}
-.login-title{font-size:12px;font-weight:800;color:rgba(255,255,255,.5);letter-spacing:.16em;text-transform:uppercase;text-align:center;margin-bottom:18px}
-.login-input{width:100%;background:rgba(255,255,255,.08);border:1.5px solid rgba(255,255,255,.15);border-radius:14px;padding:13px 16px;color:#fff;font-family:var(--font-sf);font-size:14px;font-weight:500;outline:none;margin-bottom:10px;-webkit-appearance:none}
-.login-input::placeholder{color:rgba(255,255,255,.3)}
-.login-input:focus{border-color:rgba(255,255,255,.4)}
-.login-btn{width:100%;padding:14px;border-radius:100px;border:none;background:#2d7dd2;color:#fff;font-family:var(--font-sf);font-size:13px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;margin-bottom:10px;transition:all .2s}
+#login-screen{position:fixed;top:0;left:0;right:0;bottom:0;z-index:1000;background:radial-gradient(115% 75% at 82% -8%,#d4e6f5 0%,transparent 55%),radial-gradient(95% 65% at 0% 108%,#dce8f3 0%,transparent 52%),linear-gradient(165deg,#eef4fa 0%,#e6eef7 52%,#f0f5fb 100%);display:none;flex-direction:column;align-items:center;justify-content:center;padding:32px;overflow-y:auto}
+.login-logo{font-family:var(--font-sf);font-size:30px;font-weight:800;color:var(--sky2);letter-spacing:-.02em;margin-bottom:4px}
+.login-sub{font-size:13px;color:var(--ink2);letter-spacing:.02em;margin-bottom:30px;font-weight:500}
+.login-card{position:relative;background:linear-gradient(160deg,var(--glass-bright),rgba(255,255,255,.5) 64%);backdrop-filter:blur(24px) saturate(155%);-webkit-backdrop-filter:blur(24px) saturate(155%);border:1px solid var(--glass-line);border-radius:28px;padding:30px;width:100%;max-width:380px;box-shadow:0 20px 50px rgba(40,70,110,.16),inset 0 1px 0 #fff,inset 0 0 0 1px var(--border);overflow:hidden}
+.login-card::before{content:'';position:absolute;left:0;right:0;top:0;height:36%;background:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,0));pointer-events:none;border-radius:28px 28px 0 0}
+.login-card>*{position:relative;z-index:1}
+.login-title{font-size:11px;font-weight:700;color:var(--ink3);letter-spacing:.14em;text-transform:uppercase;text-align:center;margin-bottom:18px}
+.login-input{width:100%;background:rgba(255,255,255,.7);border:1px solid var(--border);border-radius:14px;padding:14px 16px;color:var(--ink);font-family:var(--font-sf);font-size:15px;font-weight:500;outline:none;margin-bottom:10px;-webkit-appearance:none;transition:all .2s}
+.login-input::placeholder{color:#9aa8bc}
+.login-input:focus{border-color:var(--sky);background:#fff;box-shadow:0 0 0 4px rgba(45,108,151,.1)}
+.login-btn{width:100%;padding:15px;border-radius:14px;border:none;background:linear-gradient(160deg,#2d6c97,#1c4a6e);color:#fff;font-family:var(--font-sf);font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;margin-bottom:10px;transition:all .2s;box-shadow:0 10px 24px rgba(28,74,110,.3),inset 0 1px 0 rgba(255,255,255,.3)}
 .login-btn:active{transform:scale(.98)}
-.login-btn.outline{background:rgba(255,255,255,.08);border:1.5px solid rgba(255,255,255,.2)}
+.login-btn.outline{background:rgba(255,255,255,.8);border:1px solid var(--border);color:var(--ink);box-shadow:inset 0 1px 0 #fff}
 .login-btn.bio{background:linear-gradient(135deg,#18a058,#0e7040)}
-.login-divider{display:flex;align-items:center;gap:10px;margin:12px 0;color:rgba(255,255,255,.3);font-size:11px;font-weight:600}
-.login-divider::before,.login-divider::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.12)}
+.login-divider{display:flex;align-items:center;gap:10px;margin:14px 0;color:#9aa8bc;font-size:11px;font-weight:600}
+.login-divider::before,.login-divider::after{content:'';flex:1;height:1px;background:var(--border)}
 .login-error{color:#f85149;font-size:11px;font-weight:700;text-align:center;min-height:16px;margin-bottom:6px}
-.login-recover{text-align:center;font-size:11px;color:rgba(255,255,255,.4);cursor:pointer;margin-top:10px;font-weight:600}
+.login-recover{text-align:center;font-size:12px;color:var(--sky);cursor:pointer;margin-top:12px;font-weight:700}
 /* AGENDA CALENDAR */
 .cal-day{min-height:44px;border-radius:8px;padding:4px;cursor:pointer;position:relative;background:var(--bg);border:1.5px solid transparent;transition:all .15s;display:flex;flex-direction:column;align-items:center}
 .cal-day:active{transform:scale(.93)}
@@ -502,12 +504,12 @@ input[list]{background-image:none}
 .cal-day-event-title{font-size:13px;font-weight:700;color:var(--ink);flex:1}
 .ios-toggle{position:relative;display:inline-block;width:44px;height:26px;flex-shrink:0}
 .ios-toggle input{opacity:0;width:0;height:0;position:absolute}
-.ios-toggle-slider{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,.2);border-radius:26px;transition:all .3s cubic-bezier(.4,0,.2,1);cursor:pointer;border:1.5px solid rgba(255,255,255,.25)}
+.ios-toggle-slider{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(120,150,190,.25);border-radius:26px;transition:all .3s cubic-bezier(.4,0,.2,1);cursor:pointer;border:1.5px solid rgba(120,150,190,.3)}
 .ios-toggle-slider:before{content:'';position:absolute;height:20px;width:20px;left:2px;bottom:2px;background:white;border-radius:50%;transition:all .3s cubic-bezier(.4,0,.2,1);box-shadow:0 2px 4px rgba(0,0,0,.3)}
 .ios-toggle input:checked + .ios-toggle-slider{background:#34c759;border-color:#2db34a}
 .ios-toggle input:checked + .ios-toggle-slider:before{transform:translateX(18px)}
 .ios-toggle-row{display:flex;align-items:center;gap:12px;margin-bottom:12px}
-.ios-toggle-label{font-size:12px;color:rgba(255,255,255,.8);line-height:1.4;flex:1}
+.ios-toggle-label{font-size:12px;color:var(--ink2);line-height:1.4;flex:1}
 /* USER AVATAR */
 .user-avatar{width:32px;height:32px;border-radius:50%;background:var(--sky);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;cursor:pointer;transition:transform .15s;flex-shrink:0}
 .user-avatar:active{transform:scale(.92)}
@@ -666,7 +668,7 @@ input[list]{background-image:none}
 #fab-main{width:72px;height:72px;border-radius:20px;background:linear-gradient(135deg,#667eea,#764ba2);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 32px rgba(118,75,162,.45),0 0 18px 2px rgba(118,75,162,.35),0 0 0 1px rgba(255,255,255,.12) inset;transition:transform .2s}
 #fab-main:active{transform:scale(.92)}
 
-#splash-screen{position:fixed;inset:0;z-index:9999;background:linear-gradient(160deg,#eef1ff 0%,#e8ecff 30%,#eae6ff 70%,#f3eeff 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px;transition:opacity .45s ease}
+#splash-screen{position:fixed;inset:0;z-index:9999;background:radial-gradient(115% 75% at 82% -8%,#d4e6f5 0%,transparent 55%),radial-gradient(95% 65% at 0% 108%,#dce8f3 0%,transparent 52%),linear-gradient(165deg,#eef4fa 0%,#e6eef7 52%,#f0f5fb 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px;transition:opacity .45s ease}
 #splash-screen.hide{opacity:0;pointer-events:none}
 .sp-wrap{width:120px;height:120px;border-radius:30px;background:linear-gradient(135deg,#8ab4f8 0%,#6c63ff 55%,#a78bf0 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 16px 44px rgba(108,99,255,.4),0 0 0 1px rgba(255,255,255,.18) inset;animation:spBreathe 3s ease-in-out infinite}
 @keyframes spBreathe{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
@@ -676,7 +678,7 @@ input[list]{background-image:none}
 .sp-bar.b2{animation-delay:.12s}.sp-bar.b3{animation-delay:.24s}.sp-bar.b4{animation-delay:.36s}
 @keyframes spDraw{0%{stroke-dashoffset:var(--len)}35%{stroke-dashoffset:0}85%{stroke-dashoffset:0;opacity:1}97%{stroke-dashoffset:0;opacity:0}100%{stroke-dashoffset:var(--len);opacity:0}}
 @keyframes spBar{0%,38%{opacity:0;transform:scaleY(0)}52%{opacity:1;transform:scaleY(1.12)}58%{transform:scaleY(1)}85%{opacity:1;transform:scaleY(1)}97%,100%{opacity:0;transform:scaleY(1)}}
-.sp-name{font-size:24px;font-weight:800;letter-spacing:-.02em;color:#1a1c3a}
+.sp-name{font-size:24px;font-weight:800;letter-spacing:-.02em;color:#1c4a6e}
 @media (prefers-reduced-motion:reduce){.sp-wrap,.sp-draw,.sp-bar{animation:none}.sp-draw{stroke-dashoffset:0}.sp-bar{opacity:1}}
 
 #ai-chat-sheet{position:fixed;inset:0;z-index:600;background:rgba(13,31,60,.45);backdrop-filter:blur(8px);display:none;align-items:flex-end;justify-content:center}
@@ -1597,7 +1599,8 @@ function hideSplash(){
 
 <!-- LOGIN SCREEN -->
 <div id="login-screen">
-  <div class="login-logo">Planni<span style="font-weight:400;font-size:22px;opacity:.6">OS</span></div>
+  <div style="width:80px;height:80px;border-radius:22px;background:linear-gradient(135deg,#8ab4f8,#6c63ff 55%,#a78bf0);display:flex;align-items:center;justify-content:center;box-shadow:0 12px 30px rgba(40,70,110,.28),inset 0 1px 0 rgba(255,255,255,.4);margin-bottom:14px"><img src="/apple-touch-icon.png" width="58" height="58" style="object-fit:contain"></div>
+  <div class="login-logo">Planni</div>
   <div class="login-sub">Sua agenda inteligente</div>
   <div class="login-card">
     <div class="login-title" id="login-mode-title">Entrar na sua conta</div>
@@ -1607,15 +1610,15 @@ function hideSplash(){
       <div style="margin-top:12px">
         <div class="ios-toggle-row">
           <label class="ios-toggle"><input type="checkbox" id="reg-terms"><span class="ios-toggle-slider"></span></label>
-          <span class="ios-toggle-label">Li e aceito os <span style="color:#a8d4ff;text-decoration:underline;cursor:pointer" onclick="openLegalDoc('terms')">Termos de Uso</span> <span style="color:#ff9b9b;font-weight:700">*</span></span>
+          <span class="ios-toggle-label">Li e aceito os <span style="color:#2d6c97;text-decoration:underline;cursor:pointer" onclick="openLegalDoc('terms')">Termos de Uso</span> <span style="color:#dc4a44;font-weight:700">*</span></span>
         </div>
         <div class="ios-toggle-row">
           <label class="ios-toggle"><input type="checkbox" id="reg-privacy"><span class="ios-toggle-slider"></span></label>
-          <span class="ios-toggle-label">Li e aceito a <span style="color:#a8d4ff;text-decoration:underline;cursor:pointer" onclick="openLegalDoc('privacy')">Política de Privacidade</span> <span style="color:#ff9b9b;font-weight:700">*</span></span>
+          <span class="ios-toggle-label">Li e aceito a <span style="color:#2d6c97;text-decoration:underline;cursor:pointer" onclick="openLegalDoc('privacy')">Política de Privacidade</span> <span style="color:#dc4a44;font-weight:700">*</span></span>
         </div>
         <div class="ios-toggle-row" style="margin-bottom:0">
           <label class="ios-toggle"><input type="checkbox" id="reg-marketing"><span class="ios-toggle-slider"></span></label>
-          <span class="ios-toggle-label" style="color:rgba(255,255,255,.6)">Autorizo receber comunicações e novidades <span style="color:rgba(255,255,255,.4)">(opcional)</span></span>
+          <span class="ios-toggle-label" style="color:var(--ink2)">Autorizo receber comunicações e novidades <span style="color:var(--ink3)">(opcional)</span></span>
         </div>
       </div>
     </div>
@@ -1625,28 +1628,28 @@ function hideSplash(){
     <div class="login-error" id="login-error"></div>
     <div class="ios-toggle-row" id="keep-connected-row" style="margin:4px 0 14px">
       <label class="ios-toggle"><input type="checkbox" id="keep-connected" checked><span class="ios-toggle-slider"></span></label>
-      <span class="ios-toggle-label" style="font-size:13px;color:rgba(255,255,255,.85)">Manter-me conectado</span>
+      <span class="ios-toggle-label" style="font-size:13px;color:var(--ink2)">Manter-me conectado</span>
     </div>
     <button class="login-btn" id="login-submit-btn" onclick="loginEmail()">Entrar</button>
-    <div style="text-align:center;margin:12px 0;font-size:12px;color:rgba(255,255,255,.5)">
+    <div style="text-align:center;margin:12px 0;font-size:12px;color:var(--ink2)">
       <span id="login-toggle-text">Não tem conta? </span>
-      <span style="color:#a8b8c8;cursor:pointer;font-weight:700" id="login-toggle-link" onclick="toggleAuthMode()">Cadastre-se</span>
+      <span style="color:#2d6c97;cursor:pointer;font-weight:700" id="login-toggle-link" onclick="toggleAuthMode()">Cadastre-se</span>
     </div>
     <div style="text-align:center;margin-top:12px">
-      <span style="font-size:13px;font-weight:700;color:#a8d4ff;cursor:pointer;padding:8px;display:inline-block" onclick="recoverPassword()">Esqueci minha senha</span>
+      <span style="font-size:13px;font-weight:700;color:#2d6c97;cursor:pointer;padding:8px;display:inline-block" onclick="recoverPassword()">Esqueci minha senha</span>
     </div>
-    <div id="google-loading" style="display:none;flex-direction:column;align-items:center;gap:10px;padding:14px;background:rgba(255,255,255,.08);border-radius:14px;margin-bottom:8px">
-      <div style="width:24px;height:24px;border:3px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite"></div>
-      <span style="font-size:12px;font-weight:700;color:rgba(255,255,255,.75)">Conectando com Google...</span>
+    <div id="google-loading" style="display:none;flex-direction:column;align-items:center;gap:10px;padding:14px;background:rgba(255,255,255,.7);border:1px solid var(--border);border-radius:14px;margin-bottom:8px">
+      <div style="width:24px;height:24px;border:3px solid rgba(45,108,151,.2);border-top-color:#2d6c97;border-radius:50%;animation:spin .8s linear infinite"></div>
+      <span style="font-size:12px;font-weight:700;color:var(--ink2)">Conectando com Google...</span>
     </div>
     <button class="login-btn outline" onclick="loginGoogle()">
       <svg width="16" height="16" viewBox="0 0 24 24" style="margin-right:8px;vertical-align:middle"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
       Continuar com Google
     </button>
-    <div style="text-align:center;margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.1)">
-      <span style="font-size:10px;color:rgba(255,255,255,.4);cursor:pointer" onclick="openLegalDoc('terms')">Termos de Uso</span>
-      <span style="font-size:10px;color:rgba(255,255,255,.3);margin:0 8px">·</span>
-      <span style="font-size:10px;color:rgba(255,255,255,.4);cursor:pointer" onclick="openLegalDoc('privacy')">Política de Privacidade</span>
+    <div style="text-align:center;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+      <span style="font-size:10px;color:var(--ink3);cursor:pointer" onclick="openLegalDoc('terms')">Termos de Uso</span>
+      <span style="font-size:10px;color:var(--ink4);margin:0 8px">·</span>
+      <span style="font-size:10px;color:var(--ink3);cursor:pointer" onclick="openLegalDoc('privacy')">Política de Privacidade</span>
     </div>
   </div>
 </div>
