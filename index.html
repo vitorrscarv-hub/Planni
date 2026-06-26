@@ -6219,19 +6219,86 @@ function _cancelExtratoImport(btn){
   }
 }
 
-function _aiBuildContext(){
+function _aiBuildContext(userMsg){
   // Compact snapshot so we don't blow the token budget
   function slim(arr,fields,max){
     return (arr||[]).slice(0,max||40).map(function(o){
       var r={}; fields.forEach(function(f){ if(o[f]!==undefined) r[f]=o[f]; }); return r;
     });
   }
+
+  var allTx = state.transactions || [];
+
+  // ---- Resumo agregado das transacoes (leve, cobre perguntas genericas) ----
+  var totalIn=0, totalOut=0, porCat={};
+  allTx.forEach(function(t){
+    if(t.type==='in') totalIn += (t.val||0); else totalOut += (t.val||0);
+    var c=t.cat||'outros';
+    if(!porCat[c]) porCat[c]={in:0,out:0,count:0};
+    if(t.type==='in') porCat[c].in += (t.val||0); else porCat[c].out += (t.val||0);
+    porCat[c].count++;
+  });
+  var resumoTx = {
+    total: allTx.length,
+    totalReceitas: Math.round(totalIn*100)/100,
+    totalDespesas: Math.round(totalOut*100)/100,
+    saldo: Math.round((totalIn-totalOut)*100)/100,
+    porCategoria: porCat
+  };
+
+  // ---- Busca inteligente: se a pergunta cita valor ou nome, garante essas transacoes ----
+  var relevantes = [];
+  var msg = String(userMsg||'').toLowerCase();
+  if(msg){
+    // Valores citados na pergunta: "1000", "R$1.000,00", "55,00", "1.234,56" etc.
+    var valuesFound = [];
+    // Captura numeros com separadores BR (1.000,00), US (1,000.00) ou simples (1000 / 55,90)
+    var vm = msg.match(/\d[\d.,]*/g);
+    if(vm){
+      vm.forEach(function(raw){
+        var s = String(raw);
+        var n;
+        if(/,\d{1,2}$/.test(s)){
+          // formato BR: ponto = milhar, virgula = decimal
+          n = parseFloat(s.replace(/\./g,'').replace(',','.'));
+        } else if(/\.\d{1,2}$/.test(s) && s.indexOf(',')!==-1){
+          // formato US: virgula = milhar, ponto = decimal
+          n = parseFloat(s.replace(/,/g,''));
+        } else {
+          // numero simples, remove separadores de milhar
+          n = parseFloat(s.replace(/[.,]/g,''));
+        }
+        if(!isNaN(n) && n>0) valuesFound.push(n);
+      });
+    }
+    // Palavras "fortes" da pergunta (nomes, lugares) - ignora palavras curtas/comuns
+    var stop = ['de','da','do','com','para','por','que','uma','um','no','na','os','as','meu','minha','qual','quanto','houve','algum','algo','nesse','neste','extrato','pagamento','transacao','transacao','valor','este','essa','esse'];
+    var words = msg.replace(/[^a-zà-ÿ0-9\s]/gi,' ').split(/\s+/).filter(function(w){ return w.length>=4 && stop.indexOf(w)===-1; });
+
+    allTx.forEach(function(t){
+      var hit=false;
+      // bate por valor (com tolerancia de centavos)
+      valuesFound.forEach(function(v){ if(Math.abs((t.val||0)-v)<0.01) hit=true; });
+      // bate por nome/descricao
+      if(!hit){
+        var dl=String(t.desc||'').toLowerCase()+' '+String(t.pessoa||'').toLowerCase();
+        for(var i=0;i<words.length;i++){ if(dl.indexOf(words[i])!==-1){ hit=true; break; } }
+      }
+      if(hit) relevantes.push({desc:t.desc,val:t.val,type:t.type,cat:t.cat,date:t.date,pessoa:t.pessoa||null});
+    });
+  }
+  // Limita para nao estourar (suficiente para qualquer pergunta pontual)
+  relevantes = relevantes.slice(0,40);
+
   return {
     hoje: today(),
     mesAtual: state.viewMonth,
     eventos: slim(state.events,['title','date','time'],40),
     tarefas: slim(state.tasks,['text','done','importante','urgente'],40),
-    transacoes: slim(state.transactions,['desc','val','type','cat','date'],60),
+    // Transacoes recentes (teto elevado) + resumo agregado de TODAS
+    transacoes: slim(allTx,['desc','val','type','cat','date','pessoa'],120),
+    resumoTransacoes: resumoTx,
+    transacoesRelevantes: relevantes,
     notas: slim(state.notes,['title'],30),
     contas: slim(state.bills,['name','val','due','paid'],30)
   };
@@ -6332,12 +6399,23 @@ async function aiChatSend(){
     var resp=await fetch('/api/chat',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ message:msg, history:_aiChatHistory.slice(-8), context:_aiBuildContext() })
+      body:JSON.stringify({ message:msg, history:_aiChatHistory.slice(-8), context:_aiBuildContext(msg) })
     });
     if(typing) typing.remove();
-    if(!resp.ok) throw new Error('API '+resp.status);
-    var data=await resp.json();
-    if(data.error) throw new Error(data.error);
+
+    // Le o corpo sempre, mesmo em erro, para aproveitar a mensagem do backend
+    var data={};
+    try{ data=await resp.json(); }catch(e){ data={}; }
+
+    // Assistente sobrecarregado (Gemini 503/429)
+    if(data && data.overloaded){
+      _aiAddBubble('⏳ '+(data.error||'O assistente está sobrecarregado. Tente novamente em alguns instantes.'),'ai-bot');
+      return;
+    }
+    if(!resp.ok || (data && data.error)){
+      _aiAddBubble((data && data.error) ? data.error : 'Ops, não consegui responder agora. Tente novamente.','ai-bot');
+      return;
+    }
 
     // Execute any actions returned
     var done=[];
@@ -6357,7 +6435,7 @@ async function aiChatSend(){
 
   }catch(err){
     if(typing) typing.remove();
-    _aiAddBubble('Ops, não consegui responder agora. ('+err.message+')','ai-bot');
+    _aiAddBubble('Ops, não consegui responder agora. Verifique sua conexão e tente novamente.','ai-bot');
   }
 }
 
