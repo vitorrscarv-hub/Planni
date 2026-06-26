@@ -6063,6 +6063,42 @@ function openExtratoPicker(){
   if(input) input.click();
 }
 
+// Carrega o PDF.js sob demanda (uma vez, fica em cache). Resolve quando pronto.
+var _pdfjsLoading = null;
+function _ensurePdfJs(){
+  if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if(_pdfjsLoading) return _pdfjsLoading;
+  _pdfjsLoading = new Promise(function(resolve, reject){
+    var s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload = function(){
+      try{
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        resolve(window.pdfjsLib);
+      }catch(e){ reject(e); }
+    };
+    s.onerror = function(){ reject(new Error('Falha ao carregar PDF.js')); };
+    document.head.appendChild(s);
+  });
+  return _pdfjsLoading;
+}
+
+// Extrai o texto de um PDF no proprio navegador. Retorna string (vazia se for PDF escaneado).
+async function _extractPdfText(file){
+  var lib = await _ensurePdfJs();
+  var buf = await file.arrayBuffer();
+  var pdf = await lib.getDocument({ data: buf }).promise;
+  var fullText = '';
+  for(var p=1; p<=pdf.numPages; p++){
+    var page = await pdf.getPage(p);
+    var content = await page.getTextContent();
+    var pageText = content.items.map(function(it){ return it.str; }).join(' ');
+    fullText += pageText + '\n';
+  }
+  return fullText.trim();
+}
+
 function handleExtratoFile(input){
   var file = input.files[0];
   if(!file) return;
@@ -6078,19 +6114,36 @@ function handleExtratoFile(input){
 
   var isImage = file.type.indexOf('image/') === 0;
   var isPdf = file.type === 'application/pdf' || ext === 'pdf';
-  var reader = new FileReader();
 
+  // ===== PDF: tenta extrair texto no navegador (PDF.js) antes de enviar =====
+  // Isso evita "Load failed" em PDFs grandes e leva o texto direto ao parser nativo.
+  if(isPdf){
+    _extractPdfText(file).then(function(pdfText){
+      if(pdfText && pdfText.length > 30){
+        // PDF com texto: envia so o texto (leve, cai no parser nativo / IA textual)
+        _sendToExtratoAPI({ text: pdfText, filename: file.name || '' }, proc);
+      } else {
+        // PDF sem texto (escaneado): envia como imagem para o Gemini (fallback)
+        _pdfAsImageFallback(file, proc);
+      }
+    }).catch(function(){
+      // Se o PDF.js falhar, tenta o caminho antigo (imagem)
+      _pdfAsImageFallback(file, proc);
+    });
+    input.value = '';
+    return;
+  }
+
+  // ===== Imagem ou texto (CSV/OFX) =====
+  var reader = new FileReader();
   reader.onload = function(e){
     var payload = {};
-    if(isImage || isPdf){
-      // Remove o prefixo data:...;base64,
+    if(isImage){
       var base64 = String(e.target.result).split(',')[1];
       payload.image = base64;
-      // Informa o tipo real do arquivo para o backend (PDF, JPEG, PNG, etc.)
-      payload.mime = isPdf ? 'application/pdf' : (file.type || 'image/jpeg');
+      payload.mime = file.type || 'image/jpeg';
     } else {
       payload.text = String(e.target.result);
-      // Nome do arquivo ajuda o parser nativo a detectar OFX vs CSV
       payload.filename = file.name || '';
     }
     _sendToExtratoAPI(payload, proc);
@@ -6100,10 +6153,30 @@ function handleExtratoFile(input){
     _aiAddBubble('Não consegui ler o arquivo. Tente novamente ou use outro formato (OFX, CSV ou foto do extrato).','ai-bot');
   };
 
-  if(isImage || isPdf) reader.readAsDataURL(file);
+  if(isImage) reader.readAsDataURL(file);
   else reader.readAsText(file, 'utf-8');
 
   input.value = '';
+}
+
+// Fallback: envia o PDF como imagem (para PDFs escaneados, sem texto).
+// Avisa se o arquivo for grande demais para o envio base64.
+function _pdfAsImageFallback(file, proc){
+  if(file.size > 1.2*1024*1024){
+    if(proc) proc.remove();
+    _aiAddBubble('Esse PDF parece ser uma imagem digitalizada e é grande demais para processar. Tente exportar o extrato do seu banco em CSV ou OFX, ou envie um print de melhor qualidade.','ai-bot');
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function(e){
+    var base64 = String(e.target.result).split(',')[1];
+    _sendToExtratoAPI({ image: base64, mime: 'application/pdf' }, proc);
+  };
+  reader.onerror = function(){
+    if(proc) proc.remove();
+    _aiAddBubble('Não consegui ler o arquivo. Tente CSV ou OFX.','ai-bot');
+  };
+  reader.readAsDataURL(file);
 }
 
 async function _sendToExtratoAPI(payload, processingBubble){
