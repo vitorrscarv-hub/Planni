@@ -6086,10 +6086,12 @@ function _ensurePdfJs(){
 }
 
 // Extrai o texto de um PDF no proprio navegador. Retorna string (vazia se for PDF escaneado).
-async function _extractPdfText(file){
+async function _extractPdfText(file, password){
   var lib = await _ensurePdfJs();
   var buf = await file.arrayBuffer();
-  var pdf = await lib.getDocument({ data: buf }).promise;
+  var params = { data: buf };
+  if(password) params.password = password;
+  var pdf = await lib.getDocument(params).promise;
   var fullText = '';
   for(var p=1; p<=pdf.numPages; p++){
     var page = await pdf.getPage(p);
@@ -6098,6 +6100,14 @@ async function _extractPdfText(file){
     fullText += pageText + '\n';
   }
   return fullText.trim();
+}
+
+// Verifica se um erro do PDF.js e de senha (protegido ou senha incorreta)
+function _isPdfPasswordError(err){
+  if(!err) return false;
+  var nome = err.name || '';
+  var msg = (err.message || '').toLowerCase();
+  return nome === 'PasswordException' || msg.indexOf('password') !== -1;
 }
 
 function handleExtratoFile(input){
@@ -6118,19 +6128,9 @@ function handleExtratoFile(input){
 
   // ===== PDF: tenta extrair texto no navegador (PDF.js) antes de enviar =====
   // Isso evita "Load failed" em PDFs grandes e leva o texto direto ao parser nativo.
+  // Se o PDF for protegido por senha (ex: C6 pede 6 primeiros digitos do CPF), pede a senha.
   if(isPdf){
-    _extractPdfText(file).then(function(pdfText){
-      if(pdfText && pdfText.length > 30){
-        // PDF com texto: envia so o texto (leve, cai no parser nativo / IA textual)
-        _sendToExtratoAPI({ text: pdfText, filename: file.name || '' }, proc);
-      } else {
-        // PDF sem texto (escaneado): envia como imagem para o Gemini (fallback)
-        _pdfAsImageFallback(file, proc);
-      }
-    }).catch(function(){
-      // Se o PDF.js falhar, tenta o caminho antigo (imagem)
-      _pdfAsImageFallback(file, proc);
-    });
+    _processPdf(file, proc, null);
     input.value = '';
     return;
   }
@@ -6162,6 +6162,64 @@ function handleExtratoFile(input){
 
 // Fallback: envia o PDF como imagem (para PDFs escaneados, sem texto).
 // Avisa se o arquivo for grande demais para o envio base64.
+// Processa um PDF: extrai texto (com senha se necessario) e envia.
+// Se o PDF for protegido, mostra um campo para o usuario digitar a senha (ex: 6 primeiros do CPF).
+function _processPdf(file, proc, password){
+  _extractPdfText(file, password).then(function(pdfText){
+    if(pdfText && pdfText.length > 30){
+      _sendToExtratoAPI({ text: pdfText, filename: file.name || '' }, proc);
+    } else {
+      _pdfAsImageFallback(file, proc);
+    }
+  }).catch(function(err){
+    if(_isPdfPasswordError(err)){
+      // PDF protegido por senha: pede ao usuario
+      if(proc) proc.remove();
+      var jaErrou = !!password; // se ja tinha senha, ela estava errada
+      _askPdfPassword(file, jaErrou);
+    } else {
+      // Outro erro: tenta como imagem
+      _pdfAsImageFallback(file, proc);
+    }
+  });
+}
+
+// Mostra um balao com campo de senha para PDF protegido. Processamento 100% local.
+function _askPdfPassword(file, erro){
+  var msg = erro
+    ? '🔒 Senha incorreta. Esse extrato está protegido — digite novamente (geralmente os 6 primeiros dígitos do seu CPF):'
+    : '🔒 Esse extrato está protegido por senha. Digite a senha para abrir (no C6, são os 6 primeiros dígitos do seu CPF). Ela é usada só aqui no seu aparelho e não é enviada a lugar nenhum:';
+  var bubble = _aiAddBubble(msg, 'ai-bot');
+
+  // Campo de senha inline dentro do balao
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;gap:8px;margin-top:10px';
+  var inp = document.createElement('input');
+  inp.type = 'tel';
+  inp.inputMode = 'numeric';
+  inp.autocomplete = 'off';
+  inp.placeholder = 'Senha do extrato';
+  inp.style.cssText = 'flex:1;border:1.5px solid #d6e0ea;border-radius:100px;padding:10px 14px;font-size:15px;outline:none;font-family:inherit';
+  var btn = document.createElement('button');
+  btn.textContent = 'Abrir';
+  btn.style.cssText = 'border:none;border-radius:100px;padding:10px 18px;font-weight:800;font-size:14px;color:#fff;background:linear-gradient(160deg,#2d6c97,#1c4a6e);cursor:pointer';
+
+  function submit(){
+    var senha = inp.value.trim();
+    if(!senha){ inp.focus(); return; }
+    wrap.remove();
+    var proc2 = _aiAddBubble('<span class="extrato-processing">🔓 Abrindo o extrato protegido...</span>', 'ai-bot');
+    _processPdf(file, proc2, senha);
+  }
+  btn.onclick = submit;
+  inp.addEventListener('keydown', function(e){ if(e.key==='Enter') submit(); });
+
+  wrap.appendChild(inp);
+  wrap.appendChild(btn);
+  if(bubble) bubble.appendChild(wrap);
+  setTimeout(function(){ inp.focus(); }, 200);
+}
+
 function _pdfAsImageFallback(file, proc){
   if(file.size > 1.2*1024*1024){
     if(proc) proc.remove();
