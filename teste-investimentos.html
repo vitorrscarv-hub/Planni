@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teste — Calculadora de Renda Fixa Planni</title>
+<style>
+  :root{--petrol:#1c4a6e;--blue:#2d6c97;--ink:#1a2b3c;--grey:#5a6b7c;--soft:#dce8f3;--bg:#eef4fa;--green:#157a45;--red:#b02418}
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,system-ui,sans-serif;margin:0;padding:16px;background:var(--bg);color:var(--ink)}
+  h1{font-size:19px;margin:0 0 2px;color:var(--petrol)}
+  p.sub{margin:0 0 16px;color:var(--grey);font-size:13px}
+  .card{background:#fff;border:1.5px solid var(--soft);border-radius:16px;padding:16px;margin-bottom:14px}
+  label{font-weight:700;font-size:12.5px;display:block;margin:10px 0 5px;color:var(--ink)}
+  input,select{width:100%;border:1.5px solid var(--soft);border-radius:12px;padding:11px 13px;font-size:15px;outline:none;font-family:inherit;background:#fff}
+  input:focus,select:focus{border-color:var(--blue)}
+  .row{display:flex;gap:10px}
+  .row>div{flex:1}
+  .toggle{display:flex;align-items:center;gap:8px;margin-top:12px}
+  .toggle input{width:auto}
+  button{margin-top:16px;width:100%;border:none;border-radius:100px;padding:14px;font-weight:800;font-size:15px;background:linear-gradient(160deg,var(--blue),var(--petrol));color:#fff;cursor:pointer}
+  button:active{transform:scale(.98)}
+  .hidden{display:none}
+  .result{background:linear-gradient(160deg,#f6fafe,#eef4fa);border:1.5px solid var(--soft)}
+  .res-head{font-size:15px;font-weight:800;color:var(--petrol);margin-bottom:12px}
+  .line{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--soft);font-size:14px}
+  .line:last-child{border-bottom:none}
+  .line .lbl{color:var(--grey)}
+  .line .val{font-weight:700}
+  .val.neg{color:var(--red)}
+  .val.pos{color:var(--green)}
+  .big{font-size:17px;font-weight:800;color:var(--petrol)}
+  .erro{background:#fdeceb;border:1.5px solid #f0b4ae;color:var(--red);padding:12px;border-radius:12px;font-size:13.5px;font-weight:600}
+  .hint{font-size:11.5px;color:var(--grey);margin-top:4px}
+</style>
+</head>
+<body>
+  <h1>🧮 Calculadora de Renda Fixa</h1>
+  <p class="sub">Teste do motor de cálculo (PF). Regras fiscais 2026. Tudo local, sem IA.</p>
+
+  <div class="card">
+    <label>Tipo de investimento</label>
+    <select id="tipo">
+      <option value="cdb">CDB</option>
+      <option value="tesouro">Tesouro Direto</option>
+      <option value="lci">LCI (isento PF)</option>
+      <option value="lca">LCA (isento PF)</option>
+      <option value="cri">CRI (isento PF)</option>
+      <option value="cra">CRA (isento PF)</option>
+      <option value="debenture">Debênture comum</option>
+      <option value="debenture_incentivada">Debênture incentivada (isento PF)</option>
+    </select>
+
+    <div class="row">
+      <div>
+        <label>Valor aplicado (R$)</label>
+        <input id="valorAplicado" type="text" inputmode="decimal" placeholder="10000">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Data da aplicação</label>
+        <input id="dataAplicacao" type="date">
+      </div>
+      <div>
+        <label>Data do cálculo/resgate</label>
+        <input id="dataResgate" type="date">
+      </div>
+    </div>
+
+    <label>Como informar o rendimento?</label>
+    <select id="modo" onchange="_toggleModo()">
+      <option value="valor">Sei o valor bruto atual (do app da corretora)</option>
+      <option value="taxa">Calcular pela taxa contratada</option>
+    </select>
+
+    <div id="bloco-valor">
+      <label>Valor bruto atual (R$)</label>
+      <input id="valorBruto" type="text" inputmode="decimal" placeholder="10420">
+      <div class="hint">O valor que aparece hoje antes de impostos.</div>
+    </div>
+
+    <div id="bloco-taxa" class="hidden">
+      <label>Tipo de taxa</label>
+      <select id="tipoTaxa" onchange="_toggleTaxa()">
+        <option value="pos_cdi">Pós-fixado (% do CDI)</option>
+        <option value="pos_selic">Pós-fixado (% da Selic)</option>
+        <option value="prefixado">Prefixado (% ao ano)</option>
+        <option value="ipca_mais">IPCA + juros</option>
+      </select>
+      <div id="t-pos">
+        <div class="row">
+          <div><label>% do índice</label><input id="percentualIndice" type="text" inputmode="decimal" placeholder="110"></div>
+          <div><label>Índice acum. no período (%)</label><input id="indiceAcumulado" type="text" inputmode="decimal" placeholder="5.2"></div>
+        </div>
+        <div class="hint">Ex.: 110% do CDI, com CDI acumulado de 5,2% no período.</div>
+      </div>
+      <div id="t-pre" class="hidden">
+        <label>Taxa (% ao ano)</label>
+        <input id="taxaPrefixada" type="text" inputmode="decimal" placeholder="12">
+      </div>
+      <div id="t-ipca" class="hidden">
+        <div class="row">
+          <div><label>IPCA acum. (%)</label><input id="ipcaAcumulado" type="text" inputmode="decimal" placeholder="4.5"></div>
+          <div><label>Juros (% a.a.)</label><input id="taxaPrefixada2" type="text" inputmode="decimal" placeholder="6"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="toggle">
+      <input id="descontarInflacao" type="checkbox" onchange="_toggleInfl()">
+      <label style="margin:0">Descontar inflação (retorno real)</label>
+    </div>
+    <div id="bloco-infl" class="hidden">
+      <label>IPCA acumulado no período (%)</label>
+      <input id="ipcaPeriodo" type="text" inputmode="decimal" placeholder="4.5">
+      <div class="hint">Em breve isso virá automático da API do BACEN.</div>
+    </div>
+
+    <button onclick="calcular()">Calcular rentabilidade</button>
+  </div>
+
+  <div id="saida"></div>
+
+<script src="investimentos.js"></script>
+<script>
+function $(id){return document.getElementById(id);}
+function num(id){var v=$(id).value.trim().replace(/\./g,'').replace(',','.');return v?parseFloat(v):NaN;}
+function numTaxa(id){var v=$(id).value.trim().replace(',','.');return v?parseFloat(v):NaN;}
+function fmt(v){return (v==null||isNaN(v))?'—':v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+function _toggleModo(){
+  var m=$('modo').value;
+  $('bloco-valor').classList.toggle('hidden', m!=='valor');
+  $('bloco-taxa').classList.toggle('hidden', m!=='taxa');
+}
+function _toggleTaxa(){
+  var t=$('tipoTaxa').value;
+  $('t-pos').classList.toggle('hidden', !(t==='pos_cdi'||t==='pos_selic'));
+  $('t-pre').classList.toggle('hidden', t!=='prefixado');
+  $('t-ipca').classList.toggle('hidden', t!=='ipca_mais');
+}
+function _toggleInfl(){ $('bloco-infl').classList.toggle('hidden', !$('descontarInflacao').checked); }
+
+function calcular(){
+  var p = {
+    tipo: $('tipo').value,
+    valorAplicado: num('valorAplicado'),
+    dataAplicacao: $('dataAplicacao').value,
+    dataResgate: $('dataResgate').value,
+    descontarInflacao: $('descontarInflacao').checked
+  };
+  if($('descontarInflacao').checked) p.ipcaPeriodo = numTaxa('ipcaPeriodo');
+
+  if($('modo').value==='valor'){
+    p.valorBruto = num('valorBruto');
+  } else {
+    // calcula rendimento pela taxa
+    var tt = $('tipoTaxa').value;
+    var taxaParams = { valorAplicado:p.valorAplicado, dataAplicacao:p.dataAplicacao, dataResgate:p.dataResgate, tipoTaxa:tt };
+    if(tt==='pos_cdi'||tt==='pos_selic'){
+      taxaParams.percentualIndice = numTaxa('percentualIndice');
+      taxaParams.indiceAcumulado = numTaxa('indiceAcumulado');
+    } else if(tt==='prefixado'){
+      taxaParams.taxaPrefixada = numTaxa('taxaPrefixada');
+    } else if(tt==='ipca_mais'){
+      taxaParams.ipcaAcumulado = numTaxa('ipcaAcumulado');
+      taxaParams.taxaPrefixada = numTaxa('taxaPrefixada2');
+    }
+    var rend = rendimentoPorTaxa(taxaParams);
+    if(rend==null){ mostrarErro('Não consegui calcular pela taxa. Confira os campos.'); return; }
+    p.rendimentoBruto = rend;
+  }
+
+  var r = calcularRendaFixa(p);
+  if(r.erro){ mostrarErro(r.erro); return; }
+  mostrar(r);
+}
+
+function mostrarErro(msg){
+  $('saida').innerHTML = '<div class="card"><div class="erro">⚠️ '+msg+'</div></div>';
+}
+
+function mostrar(r){
+  var aliqIR = (r.aliquotaIR*100).toFixed(1).replace('.',',')+'%';
+  var aliqIOF = (r.aliquotaIOF*100).toFixed(0)+'%';
+  var html = '<div class="card result">';
+  html += '<div class="res-head">Resultado · '+r.tipo.toUpperCase()+(r.isento?' (isento de IR)':'')+' · '+r.dias+' dias</div>';
+  html += linha('Valor aplicado', 'R$ '+fmt(r.valorAplicado));
+  html += linha('Valor bruto na data', 'R$ '+fmt(r.valorBruto));
+  html += linha('Rendimento bruto', 'R$ '+fmt(r.rendimentoBruto), 'pos');
+  if(r.valorIOF>0) html += linha('IOF ('+aliqIOF+', resgate < 30d)', '− R$ '+fmt(r.valorIOF), 'neg');
+  if(r.valorIR>0) html += linha('IR ('+aliqIR+')', '− R$ '+fmt(r.valorIR), 'neg');
+  if(r.isento) html += linha('IR', 'Isento', 'pos');
+  html += '<div class="line"><span class="lbl big">Valor líquido</span><span class="val big">R$ '+fmt(r.valorLiquido)+'</span></div>';
+  html += linha('Rentabilidade líquida', r.rentabilidadeNominal.toFixed(2).replace('.',',')+'%', r.rentabilidadeNominal>=0?'pos':'neg');
+  if(r.descontouInflacao){
+    html += linha('Rentabilidade real (s/ inflação)', r.rentabilidadeReal.toFixed(2).replace('.',',')+'%', r.rentabilidadeReal>=0?'pos':'neg');
+    html += linha('Valor real (poder de compra)', 'R$ '+fmt(r.valorReal));
+  }
+  html += '</div>';
+  $('saida').innerHTML = html;
+}
+function linha(lbl,val,cls){
+  return '<div class="line"><span class="lbl">'+lbl+'</span><span class="val '+(cls||'')+'">'+val+'</span></div>';
+}
+
+// valores padrao para facilitar o teste
+window.addEventListener('load', function(){
+  $('dataAplicacao').value = '2025-01-10';
+  $('dataResgate').value = '2026-06-28';
+});
+</script>
+</body>
+</html>
