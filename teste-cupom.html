@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cupom — Crédito Privado vs Tesouro | Planni Pro</title>
+<style>
+  :root{--petrol:#1c4a6e;--blue:#2d6c97;--ink:#1a2b3c;--grey:#5a6b7c;--soft:#dce8f3;--bg:#eef4fa;--green:#157a45;--gold:#c9962f;--red:#b02418}
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,system-ui,sans-serif;margin:0;padding:16px;background:var(--bg);color:var(--ink)}
+  h1{font-size:18px;margin:0 0 2px;color:var(--petrol)}
+  .badge{display:inline-block;background:linear-gradient(160deg,var(--gold),#a87a1e);color:#fff;font-size:10px;font-weight:800;padding:2px 8px;border-radius:100px;vertical-align:middle;margin-left:6px}
+  p.sub{margin:4px 0 14px;color:var(--grey);font-size:12.5px}
+  .card{background:#fff;border:1.5px solid var(--soft);border-radius:16px;padding:15px;margin-bottom:12px}
+  label{font-weight:700;font-size:12px;display:block;margin:9px 0 4px;color:var(--ink)}
+  input,select{width:100%;border:1.5px solid var(--soft);border-radius:11px;padding:10px 12px;font-size:15px;outline:none;font-family:inherit;background:#fff}
+  input:focus,select:focus{border-color:var(--blue)}
+  .row{display:flex;gap:8px}
+  .row>div{flex:1}
+  .sec-tit{font-weight:800;font-size:13px;color:var(--blue);margin:0 0 2px}
+  .toggle{display:flex;align-items:center;gap:8px;margin:10px 0 0}
+  .toggle input{width:auto}
+  .hidden{display:none}
+  .hint{font-size:11px;color:var(--grey);margin-top:4px}
+  button.calc{width:100%;border:none;border-radius:100px;padding:14px;font-weight:800;font-size:15px;background:linear-gradient(160deg,var(--blue),var(--petrol));color:#fff;cursor:pointer;margin-top:4px}
+  button.calc:active{transform:scale(.98)}
+  .aviso{background:#fff8e6;border:1.5px solid #e8c860;color:#7a5e10;padding:10px 12px;border-radius:11px;font-size:12px;margin-bottom:10px;font-weight:600}
+  .res-card{border:1.5px solid var(--soft);border-radius:14px;padding:14px;margin-bottom:10px;background:#fff}
+  .res-card.win{border-color:var(--gold);background:linear-gradient(160deg,#fffdf5,#fff8e8)}
+  .res-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .res-nome{font-weight:800;font-size:14px;color:var(--petrol)}
+  .win-tag{background:var(--gold);color:#fff;font-size:9.5px;font-weight:800;padding:2px 8px;border-radius:100px}
+  .res-line{display:flex;justify-content:space-between;padding:5px 0;font-size:13px;border-bottom:1px solid var(--soft)}
+  .res-line:last-child{border-bottom:none}
+  .res-line .l{color:var(--grey)}
+  .res-line .v{font-weight:700}
+  .v.big{font-size:15px;color:var(--green)}
+  .obs{font-size:11px;color:var(--grey);font-style:italic;margin-top:8px;padding:8px;background:#f3f8fc;border-radius:8px}
+  .erro{background:#fdeceb;border:1.5px solid #f0b4ae;color:var(--red);padding:12px;border-radius:12px;font-size:13px;font-weight:600}
+  .destaque{background:linear-gradient(160deg,#eef7f1,#e3f0e8);border:1.5px solid #aacdb8;border-radius:12px;padding:12px;margin-bottom:10px;font-size:13px;font-weight:600;color:#155}
+</style>
+</head>
+<body>
+  <h1>💰 Crédito Privado vs Tesouro<span class="badge">PRO</span></h1>
+  <p class="sub">Títulos com cupom (juros semestrais). Compara isento × tributado com IR real por cupom, custódia e reinvestimento. Regras 2026.</p>
+
+  <div class="card">
+    <p class="sec-tit">Investimento A</p>
+    <label>Tipo</label>
+    <select id="tipoA" onchange="onTipo('A')">
+      <option value="debenture_incentivada">Debênture incentivada (isento*)</option>
+      <option value="cri">CRI (isento*)</option>
+      <option value="cra">CRA (isento*)</option>
+      <option value="tesouro_ipca">Tesouro IPCA+ c/ juros (tributado)</option>
+      <option value="tesouro_pre">Tesouro Prefixado c/ juros (tributado)</option>
+      <option value="debenture">Debênture comum (tributado)</option>
+    </select>
+    <div class="row">
+      <div><label>Taxa do cupom (% a.a.)</label><input id="taxaA" type="text" inputmode="decimal" value="6.5"></div>
+      <div><label>Valor (R$)</label><input id="valorA" type="text" inputmode="decimal" value="10000"></div>
+    </div>
+    <div id="emissaoBoxA">
+      <label>Data de emissão do papel</label>
+      <input id="emissaoA" type="date" value="2025-06-01">
+      <div class="hint">Até 31/12/2025 = isento. A partir de 01/01/2026 = 5% de IR (regra nova).</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <p class="sec-tit">Investimento B</p>
+    <label>Tipo</label>
+    <select id="tipoB" onchange="onTipo('B')">
+      <option value="tesouro_ipca">Tesouro IPCA+ c/ juros (tributado)</option>
+      <option value="tesouro_pre">Tesouro Prefixado c/ juros (tributado)</option>
+      <option value="debenture">Debênture comum (tributado)</option>
+      <option value="debenture_incentivada">Debênture incentivada (isento*)</option>
+      <option value="cri">CRI (isento*)</option>
+      <option value="cra">CRA (isento*)</option>
+    </select>
+    <div class="row">
+      <div><label>Taxa do cupom (% a.a.)</label><input id="taxaB" type="text" inputmode="decimal" value="7"></div>
+      <div><label>Valor (R$)</label><input id="valorB" type="text" inputmode="decimal" value="10000"></div>
+    </div>
+    <div id="emissaoBoxB" class="hidden">
+      <label>Data de emissão do papel</label>
+      <input id="emissaoB" type="date" value="2025-06-01">
+      <div class="hint">Até 31/12/2025 = isento. A partir de 01/01/2026 = 5% de IR.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <label>Prazo (anos)</label>
+    <input id="prazo" type="text" inputmode="decimal" value="3">
+    <div class="toggle">
+      <input type="checkbox" id="incluirCustodia" checked>
+      <label style="margin:0">Incluir taxa de custódia B3 (0,2% a.a.)</label>
+    </div>
+    <div class="toggle">
+      <input type="checkbox" id="reinvestir" onchange="document.getElementById('boxReinvest').classList.toggle('hidden',!this.checked)">
+      <label style="margin:0">Reinvestir os cupons</label>
+    </div>
+    <div id="boxReinvest" class="hidden">
+      <label>Taxa de reinvestimento (% a.a.)</label>
+      <input id="taxaReinvest" type="text" inputmode="decimal" value="6">
+      <div class="hint">A que taxa os cupons recebidos seriam reaplicados.</div>
+    </div>
+  </div>
+
+  <button class="calc" onclick="comparar()">Comparar investimentos</button>
+  <div id="saida" style="margin-top:14px"></div>
+
+<script src="investimentos.js"></script>
+<script>
+function $(id){return document.getElementById(id);}
+function numT(v){if(v==null)return NaN;return parseFloat(String(v).trim().replace(',','.'));}
+function fmt(v){return (v==null||isNaN(v))?'—':v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+var ISENTOS = ['debenture_incentivada','cri','cra'];
+function ehIsento(tipo){ return ISENTOS.indexOf(tipo)!==-1; }
+
+function onTipo(qual){
+  var tipo = $('tipo'+qual).value;
+  $('emissaoBox'+qual).classList.toggle('hidden', !ehIsento(tipo));
+}
+
+function montar(qual){
+  var tipo = $('tipo'+qual).value;
+  var isento = ehIsento(tipo);
+  return {
+    tipo: tipo,
+    isento: isento,
+    valorAplicado: numT($('valor'+qual).value),
+    taxaCupomAA: numT($('taxa'+qual).value),
+    prazoAnos: numT($('prazo').value),
+    dataEmissao: isento ? $('emissao'+qual).value : null,
+    incluirCustodia: $('incluirCustodia').checked,
+    reinvestir: $('reinvestir').checked,
+    taxaReinvestAA: $('reinvestir').checked ? numT($('taxaReinvest').value) : null
+  };
+}
+
+function comparar(){
+  var pA = montar('A'), pB = montar('B');
+  var rA = calcularCupom(pA), rB = calcularCupom(pB);
+  if(rA.erro){ erro(rA.erro); return; }
+  if(rB.erro){ erro(rB.erro); return; }
+
+  var reinvest = $('reinvestir').checked;
+  // escolhe o cenario para ranquear
+  function valorFinal(r){ return reinvest && r.comReinvestir ? r.comReinvestir.valorFinal : r.semReinvestir.valorFinal; }
+  var vA = valorFinal(rA), vB = valorFinal(rB);
+  var vencedorA = vA >= vB;
+
+  var html = '';
+  // aviso de incentivado, se aplicavel
+  if(rA.avisoIncentivado || rB.avisoIncentivado){
+    html += '<div class="aviso">⚠️ '+(rA.avisoIncentivado||rB.avisoIncentivado)+'</div>';
+  }
+
+  // destaque do vencedor
+  var difReais = Math.abs(vA - vB);
+  var nomeVenc = vencedorA ? nome(pA.tipo) : nome(pB.tipo);
+  html += '<div class="destaque">🏆 '+nomeVenc+' rende R$ '+fmt(difReais)+' a mais'
+       + (reinvest?' (com reinvestimento)':' (cupons como renda)')+'.</div>';
+
+  html += card('A', pA, rA, vencedorA, reinvest);
+  html += card('B', pB, rB, !vencedorA, reinvest);
+
+  html += '<div class="obs">Cálculo de cupom assume manutenção até o vencimento. Cada cupom é tributado pela tabela regressiva contando os dias desde a compra (para títulos tributados). Custódia B3 deduzida a cada cupom quando ativada.</div>';
+  $('saida').innerHTML = html;
+}
+
+function card(qual, p, r, vencedor, reinvest){
+  var h = '<div class="res-card'+(vencedor?' win':'')+'">';
+  h += '<div class="res-top"><span class="res-nome">'+nome(p.tipo)+' ('+qual+')</span>'+(vencedor?'<span class="win-tag">🏆 MELHOR</span>':'')+'</div>';
+  h += line('Taxa do cupom', fmt(p.taxaCupomAA)+'% a.a.');
+  h += line('Tributação', p.isento ? (r.aliquotaIncentivado>0 ? '5% (papel 2026)' : 'Isento de IR') : 'Tabela regressiva (por cupom)');
+  h += line('Cupom semestral bruto', 'R$ '+fmt(r.cupomBrutoSemestral));
+  h += line('Total de IR no período', 'R$ '+fmt(r.totalIR));
+  if(r.totalCustodia>0) h += line('Total de custódia', 'R$ '+fmt(r.totalCustodia));
+  h += line('Total recebido em cupons (líq.)', 'R$ '+fmt(r.totalCupomLiquido));
+  var cen = reinvest && r.comReinvestir ? r.comReinvestir : r.semReinvestir;
+  h += '<div class="res-line"><span class="l big">Valor final</span><span class="v big">R$ '+fmt(cen.valorFinal)+'</span></div>';
+  h += line('Rentabilidade no período', fmt(cen.rentabilidadeTotal)+'%');
+  h += '</div>';
+  return h;
+}
+
+function nome(tipo){
+  var m = {debenture_incentivada:'Deb. Incentivada', cri:'CRI', cra:'CRA',
+    tesouro_ipca:'Tesouro IPCA+ c/ juros', tesouro_pre:'Tesouro Pré c/ juros', debenture:'Debênture comum'};
+  return m[tipo]||tipo;
+}
+function line(l,v){ return '<div class="res-line"><span class="l">'+l+'</span><span class="v">'+v+'</span></div>'; }
+function erro(msg){ $('saida').innerHTML = '<div class="card"><div class="erro">⚠️ '+msg+'</div></div>'; }
+</script>
+</body>
+</html>

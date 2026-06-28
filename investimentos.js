@@ -237,7 +237,197 @@ function compararPorGrossUp(itens){
   return { itens: resultado, observacao: 'Cálculo de equivalência (gross-up) assume manutenção até o vencimento.' };
 }
 
-// ---------- Busca de indices acumulados no BACEN (CDI, Selic, IPCA) ----------
+// ---------- MOTOR DE CUPOM (juros semestrais) ----------
+// Simula titulos que pagam juros periodicos (cupom): Tesouro IPCA+/Prefixado com Juros
+// Semestrais, debentures, CRI/CRA com cupom.
+//
+// Regras (verificadas 2026):
+//  - TRIBUTADO (Tesouro/debenture comum): cada cupom tributado pela tabela regressiva,
+//    contando dias desde a COMPRA. IR retido na fonte a cada pagamento. A partir do
+//    5o cupom (~2,5 anos) todos a 15%.
+//  - ISENTO com cupom (deb. incentivada/CRI/CRA): depende da DATA DE EMISSAO.
+//    Emitido ate 31/12/2025 -> 0% (isento). Emitido a partir de 01/01/2026 -> 5% (MP 1.303/25).
+//  - Taxa de custodia B3 0,2% a.a. deduzida a cada cupom (proporcional ao semestre).
+//  - Cupom mata diferimento fiscal e juros compostos (a menos que reinvestido).
+//
+// IMPORTANTE: o status legal da MP 1.303/25 esteve em disputa. O motor aplica pela data
+// de emissao mas o app deve exibir aviso para o usuario confirmar a regra do papel.
+
+var CUSTODIA_BACEN_AA = 0.002; // 0,2% ao ano (B3/Tesouro)
+var DATA_CORTE_ISENCAO = '2026-01-01'; // a partir daqui, incentivados novos = 5%
+var ALIQUOTA_INCENTIVADO_NOVO = 0.05;  // 5%
+
+// Determina a aliquota de IR de um cupom de produto ISENTO conforme data de emissao.
+function aliquotaIncentivado(dataEmissao){
+  if(!dataEmissao) return 0; // sem data, assume isento (estoque antigo) - app avisa
+  // emitido a partir de 01/01/2026 -> 5%; antes -> 0%
+  return (dataEmissao >= DATA_CORTE_ISENCAO) ? ALIQUOTA_INCENTIVADO_NOVO : 0;
+}
+
+/**
+ * Simula um titulo com cupom semestral.
+ * @param {Object} p
+ *   p.tipo            - 'tesouro_ipca' | 'tesouro_pre' | 'debenture' | 'debenture_incentivada' | 'cri' | 'cra'
+ *   p.valorAplicado   - principal investido
+ *   p.taxaCupomAA     - taxa do cupom ao ano (%), ex: 6 (paga ~2,956% por semestre)
+ *   p.prazoAnos       - prazo total em anos
+ *   p.isento          - boolean (se o produto e isento na origem)
+ *   p.dataEmissao     - 'YYYY-MM-DD' (para incentivados: define 0% ou 5%)
+ *   p.reinvestir      - boolean (reinveste os cupons?)
+ *   p.taxaReinvestAA  - taxa anual de reinvestimento (%) se reinvestir
+ *   p.incluirCustodia - boolean (default true): aplica 0,2% a.a.
+ * @returns {Object} resumo dos dois cenarios
+ */
+function calcularCupom(p){
+  var erros = [];
+  var principal = parseFloat(p.valorAplicado);
+  var taxaCupomAA = parseFloat(p.taxaCupomAA);
+  var prazoAnos = parseFloat(p.prazoAnos);
+  if(isNaN(principal)||principal<=0) erros.push('Valor aplicado inválido.');
+  if(isNaN(taxaCupomAA)||taxaCupomAA<=0) erros.push('Taxa de cupom inválida.');
+  if(isNaN(prazoAnos)||prazoAnos<=0) erros.push('Prazo inválido.');
+  if(erros.length) return { erro: erros.join(' ') };
+
+  var isento = !!p.isento;
+  var incluirCustodia = (p.incluirCustodia !== false);
+  var nSemestres = Math.round(prazoAnos * 2);
+  // taxa semestral equivalente (composta), padrao Tesouro: (1+taxaAA)^0,5 - 1
+  var taxaSemestral = Math.pow(1 + taxaCupomAA/100, 0.5) - 1;
+  var cupomBruto = principal * taxaSemestral; // valor de cada cupom (sobre o principal)
+  // custodia por semestre (0,2% a.a. / 2 = 0,1% por semestre sobre o principal)
+  var custodiaSemestre = incluirCustodia ? principal * (CUSTODIA_BACEN_AA/2) : 0;
+
+  var taxaReinvestSem = 0;
+  if(p.reinvestir && p.taxaReinvestAA != null){
+    var tr = parseFloat(p.taxaReinvestAA);
+    if(!isNaN(tr) && tr>0) taxaReinvestSem = Math.pow(1 + tr/100, 0.5) - 1;
+  }
+
+  var aliqIncent = isento ? aliquotaIncentivado(p.dataEmissao) : null;
+
+  var fluxos = [];
+  var totalCupomLiquido = 0;
+  var totalIR = 0;
+  var totalCustodia = 0;
+  // saldo reinvestido (so usado no cenario "reinvestir")
+  var saldoReinvestido = 0;
+
+  for(var s=1; s<=nSemestres; s++){
+    var diasDesdeCompra = Math.round(s * 182.5); // ~6 meses
+    var aliq;
+    if(isento){
+      aliq = aliqIncent; // 0% ou 5% conforme emissao
+    } else {
+      aliq = aliquotaIR(diasDesdeCompra); // tabela regressiva desde a compra
+    }
+    var ir = cupomBruto * aliq;
+    var cupomAposIR = cupomBruto - ir;
+    var cupomLiquido = cupomAposIR - custodiaSemestre;
+    if(cupomLiquido < 0) cupomLiquido = 0;
+
+    totalIR += ir;
+    totalCustodia += custodiaSemestre;
+    totalCupomLiquido += cupomLiquido;
+
+    // cenario reinvestir: cada cupom liquido capitaliza ate o fim
+    if(taxaReinvestSem > 0){
+      // adiciona o cupom e capitaliza os semestres restantes
+      var semestresRestantes = nSemestres - s;
+      saldoReinvestido += cupomLiquido * Math.pow(1 + taxaReinvestSem, semestresRestantes);
+    }
+
+    fluxos.push({
+      semestre: s,
+      cupomBruto: round2(cupomBruto),
+      aliquota: aliq,
+      ir: round2(ir),
+      custodia: round2(custodiaSemestre),
+      cupomLiquido: round2(cupomLiquido)
+    });
+  }
+
+  // Cenario 1: cupons NAO reinvestidos -> recebe a soma dos cupons liquidos + principal de volta
+  var valorFinalSemReinvest = principal + totalCupomLiquido;
+  // rentabilidade total nominal no periodo
+  var rentSemReinvest = (totalCupomLiquido / principal) * 100;
+
+  // Cenario 2: cupons reinvestidos -> principal + saldo reinvestido acumulado
+  var valorFinalComReinvest = null, rentComReinvest = null;
+  if(taxaReinvestSem > 0){
+    valorFinalComReinvest = principal + saldoReinvestido;
+    rentComReinvest = (saldoReinvestido / principal) * 100;
+  }
+
+  return {
+    tipo: p.tipo,
+    isento: isento,
+    aliquotaIncentivado: isento ? aliqIncent : null,
+    avisoIncentivado: isento ? 'A tributação de incentivados (CRI/CRA/debênture) mudou em 2026: papéis emitidos a partir de 01/01/2026 podem ter 5% de IR. Confirme a regra vigente do papel específico.' : null,
+    nSemestres: nSemestres,
+    cupomBrutoSemestral: round2(cupomBruto),
+    custodiaSemestral: round2(custodiaSemestre),
+    totalCupomLiquido: round2(totalCupomLiquido),
+    totalIR: round2(totalIR),
+    totalCustodia: round2(totalCustodia),
+    // cenario sem reinvestir
+    semReinvestir: {
+      valorFinal: round2(valorFinalSemReinvest),
+      rentabilidadeTotal: round2(rentSemReinvest),
+      observacao: 'Cupons recebidos como renda (não reinvestidos).'
+    },
+    // cenario reinvestindo
+    comReinvestir: taxaReinvestSem > 0 ? {
+      valorFinal: round2(valorFinalComReinvest),
+      rentabilidadeTotal: round2(rentComReinvest),
+      taxaReinvestAA: parseFloat(p.taxaReinvestAA),
+      observacao: 'Cupons reinvestidos à taxa informada.'
+    } : null,
+    fluxos: fluxos
+  };
+}
+
+// Compara um titulo COM cupom contra um SEM cupom (mesma taxa), mostrando o efeito
+// do diferimento fiscal e dos juros compostos.
+//  p: mesmos campos de calcularCupom + dataAplicacao/dataResgate para o sem-cupom
+function compararCupomVsSemCupom(p){
+  var comCupom = calcularCupom(p);
+  if(comCupom.erro) return comCupom;
+
+  // titulo sem cupom equivalente: mesma taxa, tudo no vencimento
+  var principal = parseFloat(p.valorAplicado);
+  var prazoAnos = parseFloat(p.prazoAnos);
+  var dias = Math.round(prazoAnos * 365);
+  // rendimento bruto composto pela mesma taxa anual
+  var rendBruto = principal * (Math.pow(1 + parseFloat(p.taxaCupomAA)/100, prazoAnos) - 1);
+
+  var semCupom;
+  if(p.isento){
+    // isento: aplica 0% ou 5% conforme emissao, sem custodia recorrente (so no resgate)
+    var aliq = aliquotaIncentivado(p.dataEmissao);
+    var ir = rendBruto * aliq;
+    semCupom = {
+      valorFinal: round2(principal + rendBruto - ir),
+      rendimentoLiquido: round2(rendBruto - ir),
+      aliquota: aliq
+    };
+  } else {
+    // tributado: tabela regressiva no resgate (15% se >720d)
+    var aliq2 = aliquotaIR(dias);
+    var ir2 = rendBruto * aliq2;
+    semCupom = {
+      valorFinal: round2(principal + rendBruto - ir2),
+      rendimentoLiquido: round2(rendBruto - ir2),
+      aliquota: aliq2
+    };
+  }
+
+  return {
+    comCupom: comCupom,
+    semCupom: semCupom,
+    diferencaSemReinvestir: round2(semCupom.valorFinal - comCupom.semReinvestir.valorFinal),
+    diferencaComReinvestir: comCupom.comReinvestir ? round2(semCupom.valorFinal - comCupom.comReinvestir.valorFinal) : null
+  };
+}
 // Series SGS: CDI=12 (diaria), Selic=11 (diaria), IPCA=433 (mensal).
 // Acumulacao por capitalizacao composta: produto de (1 + taxa_dia/100) - 1.
 // A API ja retorna apenas dias uteis para CDI/Selic.
@@ -288,5 +478,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = { calcularRendaFixa, rendimentoPorTaxa, aliquotaIR, aliquotaIOF,
                      buscarIndiceAcumulado, cdiAcumulado, selicAcumulada, ipcaAcumulado,
                      IPCA_INDISPONIVEL_MSG,
-                     grossUp, grossDown, tipoEhIsento, compararPorGrossUp };
+                     grossUp, grossDown, tipoEhIsento, compararPorGrossUp,
+                     calcularCupom, compararCupomVsSemCupom, aliquotaIncentivado };
 }
