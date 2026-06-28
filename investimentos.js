@@ -290,17 +290,29 @@ function calcularCupom(p){
 
   var isento = !!p.isento;
   var incluirCustodia = (p.incluirCustodia !== false);
-  var nSemestres = Math.round(prazoAnos * 2);
-  // taxa semestral equivalente (composta), padrao Tesouro: (1+taxaAA)^0,5 - 1
-  var taxaSemestral = Math.pow(1 + taxaCupomAA/100, 0.5) - 1;
-  var cupomBruto = principal * taxaSemestral; // valor de cada cupom (sobre o principal)
-  // custodia por semestre (0,2% a.a. / 2 = 0,1% por semestre sobre o principal)
-  var custodiaSemestre = incluirCustodia ? principal * (CUSTODIA_BACEN_AA/2) : 0;
 
-  var taxaReinvestSem = 0;
+  // Periodicidade do cupom: numero de pagamentos por ano (12=mensal, 2=semestral, 1=anual)
+  var pagPorAno = 2; // default semestral
+  if(p.periodicidade === 'mensal') pagPorAno = 12;
+  else if(p.periodicidade === 'anual') pagPorAno = 1;
+  else if(p.periodicidade === 'semestral') pagPorAno = 2;
+  else if(typeof p.pagamentosPorAno === 'number') pagPorAno = p.pagamentosPorAno;
+
+  var nPagamentos = Math.round(prazoAnos * pagPorAno);
+  if(nPagamentos < 1) nPagamentos = 1;
+  var fracaoAno = 1 / pagPorAno;            // fracao do ano por periodo
+  var diasPorPeriodo = 365 * fracaoAno;     // dias entre cupons
+
+  // taxa do periodo equivalente (composta): (1+taxaAA)^(1/pagPorAno) - 1
+  var taxaPeriodo = Math.pow(1 + taxaCupomAA/100, fracaoAno) - 1;
+  var cupomBruto = principal * taxaPeriodo; // valor de cada cupom (sobre o principal)
+  // custodia por periodo (0,2% a.a. proporcional ao periodo) sobre o principal
+  var custodiaPeriodo = incluirCustodia ? principal * (CUSTODIA_BACEN_AA * fracaoAno) : 0;
+
+  var taxaReinvestPer = 0;
   if(p.reinvestir && p.taxaReinvestAA != null){
     var tr = parseFloat(p.taxaReinvestAA);
-    if(!isNaN(tr) && tr>0) taxaReinvestSem = Math.pow(1 + tr/100, 0.5) - 1;
+    if(!isNaN(tr) && tr>0) taxaReinvestPer = Math.pow(1 + tr/100, fracaoAno) - 1;
   }
 
   var aliqIncent = isento ? aliquotaIncentivado(p.dataEmissao) : null;
@@ -309,11 +321,10 @@ function calcularCupom(p){
   var totalCupomLiquido = 0;
   var totalIR = 0;
   var totalCustodia = 0;
-  // saldo reinvestido (so usado no cenario "reinvestir")
   var saldoReinvestido = 0;
 
-  for(var s=1; s<=nSemestres; s++){
-    var diasDesdeCompra = Math.round(s * 182.5); // ~6 meses
+  for(var s=1; s<=nPagamentos; s++){
+    var diasDesdeCompra = Math.round(s * diasPorPeriodo);
     var aliq;
     if(isento){
       aliq = aliqIncent; // 0% ou 5% conforme emissao
@@ -322,61 +333,62 @@ function calcularCupom(p){
     }
     var ir = cupomBruto * aliq;
     var cupomAposIR = cupomBruto - ir;
-    var cupomLiquido = cupomAposIR - custodiaSemestre;
+    var cupomLiquido = cupomAposIR - custodiaPeriodo;
     if(cupomLiquido < 0) cupomLiquido = 0;
 
     totalIR += ir;
-    totalCustodia += custodiaSemestre;
+    totalCustodia += custodiaPeriodo;
     totalCupomLiquido += cupomLiquido;
 
-    // cenario reinvestir: cada cupom liquido capitaliza ate o fim
-    if(taxaReinvestSem > 0){
-      // adiciona o cupom e capitaliza os semestres restantes
-      var semestresRestantes = nSemestres - s;
-      saldoReinvestido += cupomLiquido * Math.pow(1 + taxaReinvestSem, semestresRestantes);
+    if(taxaReinvestPer > 0){
+      var periodosRestantes = nPagamentos - s;
+      saldoReinvestido += cupomLiquido * Math.pow(1 + taxaReinvestPer, periodosRestantes);
     }
 
     fluxos.push({
-      semestre: s,
+      periodo: s,
       cupomBruto: round2(cupomBruto),
       aliquota: aliq,
       ir: round2(ir),
-      custodia: round2(custodiaSemestre),
+      custodia: round2(custodiaPeriodo),
       cupomLiquido: round2(cupomLiquido)
     });
   }
 
   // Cenario 1: cupons NAO reinvestidos -> recebe a soma dos cupons liquidos + principal de volta
   var valorFinalSemReinvest = principal + totalCupomLiquido;
-  // rentabilidade total nominal no periodo
   var rentSemReinvest = (totalCupomLiquido / principal) * 100;
 
   // Cenario 2: cupons reinvestidos -> principal + saldo reinvestido acumulado
   var valorFinalComReinvest = null, rentComReinvest = null;
-  if(taxaReinvestSem > 0){
+  if(taxaReinvestPer > 0){
     valorFinalComReinvest = principal + saldoReinvestido;
     rentComReinvest = (saldoReinvestido / principal) * 100;
   }
 
+  var nomePeriodo = pagPorAno===12?'mensal':(pagPorAno===1?'anual':'semestral');
   return {
     tipo: p.tipo,
     isento: isento,
     aliquotaIncentivado: isento ? aliqIncent : null,
     avisoIncentivado: isento ? 'A tributação de incentivados (CRI/CRA/debênture) mudou em 2026: papéis emitidos a partir de 01/01/2026 podem ter 5% de IR. Confirme a regra vigente do papel específico.' : null,
-    nSemestres: nSemestres,
-    cupomBrutoSemestral: round2(cupomBruto),
-    custodiaSemestral: round2(custodiaSemestre),
+    periodicidade: nomePeriodo,
+    pagamentosPorAno: pagPorAno,
+    nPagamentos: nPagamentos,
+    nSemestres: nPagamentos, // compatibilidade
+    cupomBrutoPeriodo: round2(cupomBruto),
+    cupomBrutoSemestral: round2(cupomBruto), // compatibilidade com codigo antigo
+    custodiaPeriodo: round2(custodiaPeriodo),
+    custodiaSemestral: round2(custodiaPeriodo),
     totalCupomLiquido: round2(totalCupomLiquido),
     totalIR: round2(totalIR),
     totalCustodia: round2(totalCustodia),
-    // cenario sem reinvestir
     semReinvestir: {
       valorFinal: round2(valorFinalSemReinvest),
       rentabilidadeTotal: round2(rentSemReinvest),
       observacao: 'Cupons recebidos como renda (não reinvestidos).'
     },
-    // cenario reinvestindo
-    comReinvestir: taxaReinvestSem > 0 ? {
+    comReinvestir: taxaReinvestPer > 0 ? {
       valorFinal: round2(valorFinalComReinvest),
       rentabilidadeTotal: round2(rentComReinvest),
       taxaReinvestAA: parseFloat(p.taxaReinvestAA),

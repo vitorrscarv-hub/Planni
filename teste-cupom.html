@@ -42,7 +42,7 @@
 </head>
 <body>
   <h1>💰 Crédito Privado vs Tesouro<span class="badge">PRO</span></h1>
-  <p class="sub">Títulos com cupom (juros semestrais). Compara isento × tributado com IR real por cupom, custódia e reinvestimento. Regras 2026.</p>
+  <p class="sub">Títulos com cupom (mensal, semestral ou anual). Compara isento × tributado com IR real por cupom, custódia e reinvestimento. Regras 2026.</p>
 
   <div class="card">
     <p class="sec-tit">Investimento A</p>
@@ -91,6 +91,13 @@
   <div class="card">
     <label>Prazo (anos)</label>
     <input id="prazo" type="text" inputmode="decimal" value="3">
+    <label>Periodicidade do cupom</label>
+    <select id="periodicidade">
+      <option value="semestral">Semestral (padrão do Tesouro)</option>
+      <option value="mensal">Mensal</option>
+      <option value="anual">Anual</option>
+    </select>
+    <div class="hint">Tesouro paga semestral. Crédito privado (debênture/CRI/CRA) pode pagar mensal, semestral ou anual — confira na emissão.</div>
     <div class="toggle">
       <input type="checkbox" id="incluirCustodia" checked>
       <label style="margin:0">Incluir taxa de custódia B3 (0,2% a.a.)</label>
@@ -133,6 +140,7 @@ function montar(qual){
     valorAplicado: numT($('valor'+qual).value),
     taxaCupomAA: numT($('taxa'+qual).value),
     prazoAnos: numT($('prazo').value),
+    periodicidade: $('periodicidade').value,
     dataEmissao: isento ? $('emissao'+qual).value : null,
     incluirCustodia: $('incluirCustodia').checked,
     reinvestir: $('reinvestir').checked,
@@ -194,7 +202,9 @@ function card(qual, p, r, vencedor, reinvest){
   h += '<div class="res-top"><span class="res-nome">'+nome(p.tipo)+' ('+qual+')</span>'+(vencedor?'<span class="win-tag">🏆 MELHOR</span>':'')+'</div>';
   h += line('Taxa do cupom', fmt(p.taxaCupomAA)+'% a.a.');
   h += line('Tributação', p.isento ? (r.aliquotaIncentivado>0 ? '5% (papel 2026)' : 'Isento de IR') : 'Tabela regressiva (por cupom)');
-  h += line('Cupom semestral bruto', 'R$ '+fmt(r.cupomBrutoSemestral));
+  var labelPer = r.periodicidade==='mensal'?'mensal':(r.periodicidade==='anual'?'anual':'semestral');
+  h += line('Cupom '+labelPer+' bruto', 'R$ '+fmt(r.cupomBrutoPeriodo));
+  h += line('Nº de pagamentos', r.nPagamentos+' ('+labelPer+')');
   h += line('Total de IR no período', 'R$ '+fmt(r.totalIR));
   if(r.totalCustodia>0) h += line('Total de custódia', 'R$ '+fmt(r.totalCustodia));
   h += line('Total recebido em cupons (líq.)', 'R$ '+fmt(r.totalCupomLiquido));
@@ -269,7 +279,8 @@ function gerarRelatorioCupomPDF(){
   doc.setTextColor(PETROL[0],PETROL[1],PETROL[2]); doc.setFont('helvetica','bold'); doc.setFontSize(11);
   doc.text('Comparativo', M, y); y+=6;
 
-  var cols=['Título','Trib.','Cupom/sem.','IR total','Custódia','Valor final'];
+  var perLabel = (U.rA.periodicidade==='mensal'||U.rB.periodicidade==='mensal')?'Cupom/mês':((U.rA.periodicidade==='anual'||U.rB.periodicidade==='anual')?'Cupom/ano':'Cupom/sem.');
+  var cols=['Título','Trib.',perLabel,'IR total','Custódia','Valor final'];
   var colX=[M, M+42, M+62, M+92, M+118, M+145];
   doc.setFillColor(BLUE[0],BLUE[1],BLUE[2]); doc.rect(M, y-4, W-2*M, 7,'F');
   doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(8);
@@ -284,7 +295,7 @@ function gerarRelatorioCupomPDF(){
     doc.setFont('helvetica', t.venc?'bold':'normal');
     doc.text(String(nome(t.p.tipo)).substring(0,20), colX[0], y);
     doc.text(trib, colX[1], y);
-    doc.text('R$ '+fmt(t.r.cupomBrutoSemestral), colX[2], y);
+    doc.text('R$ '+fmt(t.r.cupomBrutoPeriodo), colX[2], y);
     doc.text('R$ '+fmt(t.r.totalIR), colX[3], y);
     doc.text('R$ '+fmt(t.r.totalCustodia), colX[4], y);
     doc.text('R$ '+fmt(cen.valorFinal), colX[5], y);
