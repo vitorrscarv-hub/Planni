@@ -93,7 +93,8 @@
           <div><label>% do índice</label><input id="percentualIndice" type="text" inputmode="decimal" placeholder="110"></div>
           <div><label>Índice acum. no período (%)</label><input id="indiceAcumulado" type="text" inputmode="decimal" placeholder="5.2"></div>
         </div>
-        <div class="hint">Ex.: 110% do CDI, com CDI acumulado de 5,2% no período.</div>
+        <button type="button" id="btnBuscar" onclick="buscarIndice()" style="margin-top:8px;background:#0d8a52;font-size:13px;padding:10px">🔄 Buscar índice automaticamente (BACEN)</button>
+        <div class="hint" id="hintIndice">Preencha as datas acima e toque para buscar o CDI/Selic real do período.</div>
       </div>
       <div id="t-pre" class="hidden">
         <label>Taxa (% ao ano)</label>
@@ -141,6 +142,27 @@ function _toggleTaxa(){
   $('t-ipca').classList.toggle('hidden', t!=='ipca_mais');
 }
 function _toggleInfl(){ $('bloco-infl').classList.toggle('hidden', !$('descontarInflacao').checked); }
+
+async function buscarIndice(){
+  var ini = $('dataAplicacao').value;
+  var fim = $('dataResgate').value;
+  if(!ini || !fim){ $('hintIndice').textContent = '⚠️ Preencha as duas datas primeiro.'; return; }
+  var tipo = $('tipoTaxa').value;
+  var serie = tipo==='pos_selic' ? 11 : 12;
+  var nome = tipo==='pos_selic' ? 'Selic' : 'CDI';
+  var btn = $('btnBuscar');
+  btn.disabled = true; btn.textContent = '⏳ Buscando '+nome+'...';
+  $('hintIndice').textContent = 'Consultando BACEN...';
+  try{
+    var r = await buscarIndiceAcumulado(serie, ini, fim);
+    $('indiceAcumulado').value = String(r.acumulado).replace('.',',');
+    $('hintIndice').textContent = '✓ '+nome+' acumulado: '+r.acumulado+'% ('+r.pontos+' dias, de '+r.primeiraData+' a '+r.ultimaData+')';
+  }catch(e){
+    $('hintIndice').textContent = '⚠️ Não consegui buscar: '+e.message+'. Você pode digitar manualmente.';
+  }finally{
+    btn.disabled = false; btn.textContent = '🔄 Buscar índice automaticamente (BACEN)';
+  }
+}
 
 function calcular(){
   var p = {
