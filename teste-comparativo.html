@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comparativo de Investimentos — Planni Pro</title>
+<style>
+  :root{--petrol:#1c4a6e;--blue:#2d6c97;--ink:#1a2b3c;--grey:#5a6b7c;--soft:#dce8f3;--bg:#eef4fa;--green:#157a45;--gold:#c9962f;--red:#b02418}
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,system-ui,sans-serif;margin:0;padding:16px;background:var(--bg);color:var(--ink)}
+  h1{font-size:19px;margin:0 0 2px;color:var(--petrol)}
+  .badge{display:inline-block;background:linear-gradient(160deg,var(--gold),#a87a1e);color:#fff;font-size:10px;font-weight:800;padding:2px 8px;border-radius:100px;vertical-align:middle;margin-left:6px}
+  p.sub{margin:4px 0 16px;color:var(--grey);font-size:13px}
+  .card{background:#fff;border:1.5px solid var(--soft);border-radius:16px;padding:15px;margin-bottom:12px}
+  label{font-weight:700;font-size:12px;display:block;margin:8px 0 4px;color:var(--ink)}
+  input,select{width:100%;border:1.5px solid var(--soft);border-radius:11px;padding:10px 12px;font-size:15px;outline:none;font-family:inherit;background:#fff}
+  input:focus,select:focus{border-color:var(--blue)}
+  .row{display:flex;gap:8px}
+  .row>div{flex:1}
+  .topo{background:linear-gradient(160deg,#f6fafe,#eef4fa)}
+  .inv-card{position:relative}
+  .inv-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+  .inv-titulo{font-weight:800;font-size:13px;color:var(--blue)}
+  .rm{background:#fdeceb;color:var(--red);border:none;border-radius:8px;padding:3px 9px;font-size:12px;font-weight:700;cursor:pointer}
+  button.add{width:100%;border:1.5px dashed var(--blue);background:#f3f8fc;color:var(--blue);border-radius:12px;padding:11px;font-weight:700;font-size:14px;cursor:pointer;margin-bottom:12px}
+  button.calc{width:100%;border:none;border-radius:100px;padding:14px;font-weight:800;font-size:15px;background:linear-gradient(160deg,var(--blue),var(--petrol));color:#fff;cursor:pointer}
+  button.calc:active{transform:scale(.98)}
+  .toggle{display:flex;align-items:center;gap:8px;margin:4px 0}
+  .toggle input{width:auto}
+  .hidden{display:none}
+  .hint{font-size:11px;color:var(--grey);margin-top:3px}
+  /* resultado */
+  .res-card{border:1.5px solid var(--soft);border-radius:14px;padding:14px;margin-bottom:10px;background:#fff}
+  .res-card.win{border-color:var(--gold);background:linear-gradient(160deg,#fffdf5,#fff8e8);box-shadow:0 4px 14px rgba(201,150,47,.18)}
+  .res-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .res-nome{font-weight:800;font-size:15px;color:var(--petrol)}
+  .win-tag{background:var(--gold);color:#fff;font-size:10px;font-weight:800;padding:2px 8px;border-radius:100px}
+  .res-line{display:flex;justify-content:space-between;padding:5px 0;font-size:13.5px;border-bottom:1px solid var(--soft)}
+  .res-line:last-child{border-bottom:none}
+  .res-line .l{color:var(--grey)}
+  .res-line .v{font-weight:700}
+  .v.big{font-size:16px;color:var(--green)}
+  .obs{font-size:11px;color:var(--grey);font-style:italic;margin-top:8px;padding:8px;background:#f3f8fc;border-radius:8px}
+  .erro{background:#fdeceb;border:1.5px solid #f0b4ae;color:var(--red);padding:12px;border-radius:12px;font-size:13px;font-weight:600}
+</style>
+</head>
+<body>
+  <h1>📊 Comparativo de Investimentos<span class="badge">PRO</span></h1>
+  <p class="sub">Compara renda fixa de forma justa (gross-up) + resultado em reais. PF, regras 2026.</p>
+
+  <div class="card topo">
+    <div class="toggle">
+      <input type="checkbox" id="personalizar" onchange="render()">
+      <label style="margin:0">Personalizar valor e prazo por investimento</label>
+    </div>
+    <div id="globais">
+      <div class="row">
+        <div>
+          <label>Valor a investir (R$)</label>
+          <input id="valorGlobal" type="text" inputmode="decimal" placeholder="50000" value="50000">
+        </div>
+        <div>
+          <label>Prazo (dias)</label>
+          <input id="diasGlobal" type="number" inputmode="numeric" placeholder="730" value="730">
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div>
+          <label>CDI acum. no período (%)</label>
+          <input id="cdiGlobal" type="text" inputmode="decimal" placeholder="ex: 14.5">
+        </div>
+        <div style="display:flex;align-items:flex-end">
+          <button type="button" onclick="buscarCDIglobal()" style="width:100%;background:#0d8a52;color:#fff;border:none;border-radius:11px;padding:10px;font-weight:700;font-size:13px;cursor:pointer">🔄 Buscar CDI</button>
+        </div>
+      </div>
+      <div class="hint" id="hintCDI">O CDI do período é usado para converter "% do CDI" em reais. Informe as datas ou digite direto.</div>
+      <div class="row" style="margin-top:8px">
+        <div><label>Data inicial</label><input id="dataIni" type="date"></div>
+        <div><label>Data final</label><input id="dataFim" type="date"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="lista"></div>
+
+  <button class="add" onclick="addInv()">+ Adicionar investimento</button>
+  <button class="calc" onclick="comparar()">Comparar investimentos</button>
+
+  <div id="saida" style="margin-top:14px"></div>
+
+<script src="investimentos.js"></script>
+<script>
+function $(id){return document.getElementById(id);}
+function num(v){if(v==null)return NaN;return parseFloat(String(v).trim().replace(/\./g,'').replace(',','.'));}
+function numT(v){if(v==null)return NaN;return parseFloat(String(v).trim().replace(',','.'));}
+function fmt(v){return (v==null||isNaN(v))?'—':v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+var TIPOS = [
+  {v:'cdb',t:'CDB (tributado)'},
+  {v:'tesouro',t:'Tesouro Direto (tributado)'},
+  {v:'lci',t:'LCI (isento)'},
+  {v:'lca',t:'LCA (isento)'},
+  {v:'cri',t:'CRI (isento)'},
+  {v:'cra',t:'CRA (isento)'},
+  {v:'debenture_incentivada',t:'Debênture incentivada (isento)'}
+];
+
+var investimentos = [
+  {nome:'CDB', tipo:'cdb', taxaCDI:'110', valor:'', dias:''},
+  {nome:'LCI', tipo:'lci', taxaCDI:'98', valor:'', dias:''}
+];
+
+function render(){
+  var pers = $('personalizar').checked;
+  var html = '';
+  investimentos.forEach(function(inv, i){
+    html += '<div class="card inv-card">';
+    html += '<div class="inv-head"><span class="inv-titulo">Investimento '+(i+1)+'</span>';
+    if(investimentos.length>2) html += '<button class="rm" onclick="rmInv('+i+')">remover</button>';
+    html += '</div>';
+    html += '<label>Nome (opcional)</label><input type="text" value="'+(inv.nome||'')+'" oninput="upd('+i+',\'nome\',this.value)" placeholder="Ex: CDB Banco X">';
+    html += '<div class="row"><div>';
+    html += '<label>Tipo</label><select onchange="upd('+i+',\'tipo\',this.value)">';
+    TIPOS.forEach(function(t){ html += '<option value="'+t.v+'"'+(inv.tipo===t.v?' selected':'')+'>'+t.t+'</option>'; });
+    html += '</select></div><div>';
+    html += '<label>Taxa (% do CDI)</label><input type="text" inputmode="decimal" value="'+(inv.taxaCDI||'')+'" oninput="upd('+i+',\'taxaCDI\',this.value)" placeholder="110"></div></div>';
+    if(pers){
+      html += '<div class="row" style="margin-top:8px"><div>';
+      html += '<label>Valor (R$)</label><input type="text" inputmode="decimal" value="'+(inv.valor||'')+'" oninput="upd('+i+',\'valor\',this.value)" placeholder="50000"></div><div>';
+      html += '<label>Prazo (dias)</label><input type="number" value="'+(inv.dias||'')+'" oninput="upd('+i+',\'dias\',this.value)" placeholder="730"></div></div>';
+    }
+    html += '</div>';
+  });
+  $('lista').innerHTML = html;
+  $('globais').classList.toggle('hidden', pers);
+}
+
+function upd(i,campo,val){ investimentos[i][campo]=val; }
+function addInv(){ if(investimentos.length>=4){alert('Máximo de 4 investimentos.');return;} investimentos.push({nome:'',tipo:'cdb',taxaCDI:'',valor:'',dias:''}); render(); }
+function rmInv(i){ investimentos.splice(i,1); render(); }
+
+async function buscarCDIglobal(){
+  var ini=$('dataIni').value, fim=$('dataFim').value;
+  if(!ini||!fim){ $('hintCDI').textContent='⚠️ Preencha as duas datas para buscar o CDI.'; return; }
+  $('hintCDI').textContent='Buscando CDI no BACEN...';
+  try{
+    var r = await cdiAcumulado(ini,fim);
+    $('cdiGlobal').value = String(r.acumulado).replace('.',',');
+    // calcula dias do periodo automaticamente
+    var d = Math.round((new Date(fim)-new Date(ini))/86400000);
+    if(d>0) $('diasGlobal').value = d;
+    $('hintCDI').textContent='✓ CDI acumulado: '+r.acumulado+'% ('+r.pontos+' dias úteis). Prazo ajustado para '+d+' dias.';
+  }catch(e){ $('hintCDI').textContent='⚠️ '+e.message+'. Digite o CDI manualmente.'; }
+}
+
+function comparar(){
+  var pers = $('personalizar').checked;
+  var cdiAcum = numT($('cdiGlobal').value);
+  var valorG = num($('valorGlobal').value);
+  var diasG = parseInt($('diasGlobal').value,10);
+
+  // monta itens para o gross-up (sempre precisa de taxaCDI e dias)
+  var itens = [];
+  var erro = null;
+  investimentos.forEach(function(inv,idx){
+    var taxa = numT(inv.taxaCDI);
+    var dias = pers ? parseInt(inv.dias,10) : diasG;
+    if(isNaN(taxa)||taxa<=0){ erro='Informe a taxa (% do CDI) do investimento '+(idx+1)+'.'; return; }
+    if(isNaN(dias)||dias<=0){ erro='Informe o prazo (dias) do investimento '+(idx+1)+'.'; return; }
+    itens.push({ nome:inv.nome||inv.tipo.toUpperCase(), tipo:inv.tipo, taxaCDI:taxa, dias:dias });
+  });
+  if(erro){ $('saida').innerHTML='<div class="card"><div class="erro">⚠️ '+erro+'</div></div>'; return; }
+
+  // 1) ranking por gross-up (eficiencia)
+  var comp = compararPorGrossUp(itens);
+  if(comp.erro){ $('saida').innerHTML='<div class="card"><div class="erro">⚠️ '+comp.erro+'</div></div>'; return; }
+
+  // 2) resultado em reais (precisa de CDI acumulado e valor)
+  var temCDI = !isNaN(cdiAcum) && cdiAcum>0;
+  var resultadosReais = {};
+  if(temCDI){
+    comp.itens.forEach(function(it){
+      var valor = pers ? num((investimentos.find(function(x){return (x.nome||x.tipo.toUpperCase())===it.nome;})||{}).valor) : valorG;
+      if(isNaN(valor)||valor<=0) valor = valorG;
+      // rendimento bruto = valor * (taxaCDI/100) * (cdiAcum/100)
+      var rendBruto = valor * (it.taxaInformada/100) * (cdiAcum/100);
+      var r = calcularRendaFixa({ tipo:it.tipo, valorAplicado:valor, dataAplicacao:'2025-01-01',
+        dataResgate: _addDias('2025-01-01', it.dias), rendimentoBruto: rendBruto });
+      resultadosReais[it.nome] = { valor:valor, r:r };
+    });
+  }
+
+  // render
+  var html='';
+  comp.itens.forEach(function(it){
+    html += '<div class="res-card'+(it.vencedor?' win':'')+'">';
+    html += '<div class="res-top"><span class="res-nome">'+it.nome+'</span>'+(it.vencedor?'<span class="win-tag">🏆 MELHOR</span>':'')+'</div>';
+    html += line('Tipo', it.tipo.toUpperCase()+(it.isento?' · isento de IR':' · tributado'));
+    html += line('Taxa informada', it.taxaInformada+'% do CDI');
+    if(it.isento){
+      html += line('CDB equivalente (gross-up)', '<b>'+it.cdbEquivalente+'% do CDI</b>');
+      html += '<div class="hint">Esta isenta equivale a um CDB que pagasse '+it.cdbEquivalente+'% do CDI.</div>';
+    } else {
+      html += line('IR no período', (it.aliquotaIR*100).toFixed(1).replace('.',',')+'%');
+    }
+    if(temCDI && resultadosReais[it.nome]){
+      var rr = resultadosReais[it.nome];
+      html += line('Valor investido', 'R$ '+fmt(rr.valor));
+      html += line('Rendimento líquido', 'R$ '+fmt(rr.r.rendimentoLiquido));
+      html += '<div class="res-line"><span class="l">Valor líquido final</span><span class="v big">R$ '+fmt(rr.r.valorLiquido)+'</span></div>';
+    }
+    html += '</div>';
+  });
+  if(!temCDI){
+    html += '<div class="obs">💡 Para ver o resultado em reais, informe o CDI acumulado do período (campo acima ou busque pelo BACEN). O ranking por gross-up acima já é válido.</div>';
+  }
+  html += '<div class="obs">'+comp.observacao+'</div>';
+  $('saida').innerHTML = html;
+}
+
+function line(l,v){ return '<div class="res-line"><span class="l">'+l+'</span><span class="v">'+v+'</span></div>'; }
+function _addDias(dataISO,dias){ var d=new Date(dataISO+'T00:00:00'); d.setDate(d.getDate()+dias); return d.toISOString().slice(0,10); }
+
+render();
+</script>
+</body>
+</html>
