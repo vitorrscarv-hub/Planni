@@ -167,6 +167,76 @@ function rendimentoPorTaxa(p){
 
 function round2(v){ return Math.round(v * 100) / 100; }
 
+// ---------- GROSS-UP: equivalencia entre isentos e tributados ----------
+// Coloca produtos isentos (LCI/LCA/CRI/CRA/deb. incentivada) e tributados (CDB/Tesouro)
+// na MESMA base de comparacao. Regra de ouro: nunca comparar taxa bruta de tributado
+// com taxa de isento diretamente.
+//
+// Formula (confirmada, fontes de mercado 2026):
+//   - Isento -> base de tributado (CDB equivalente):  taxaIsenta / (1 - aliqIR)
+//   - Tributado -> base de isento (LCI equivalente):  taxaTributado * (1 - aliqIR)
+//
+// IMPORTANTE: o gross-up assume manutencao ate o vencimento (buy and hold).
+// Resgate antecipado pode ter variacao de mercado nao refletida aqui.
+
+// Converte a taxa de um produto ISENTO para o CDB equivalente (base tributada).
+// taxaIsenta: ex 90 (= 90% do CDI). dias: prazo ate o vencimento.
+function grossUp(taxaIsenta, dias){
+  var aliq = aliquotaIR(dias);
+  var equivalente = taxaIsenta / (1 - aliq);
+  return {
+    taxaOriginal: round2(taxaIsenta),
+    aliquotaIR: aliq,
+    cdbEquivalente: round2(equivalente),  // quanto um CDB tributado precisaria pagar para empatar
+    dias: dias
+  };
+}
+
+// Converte a taxa de um produto TRIBUTADO para a base isenta (LCI equivalente).
+function grossDown(taxaTributada, dias){
+  var aliq = aliquotaIR(dias);
+  var equivalente = taxaTributada * (1 - aliq);
+  return {
+    taxaOriginal: round2(taxaTributada),
+    aliquotaIR: aliq,
+    lciEquivalente: round2(equivalente), // quanto um isento precisaria pagar para empatar
+    dias: dias
+  };
+}
+
+// Tipos isentos (reaproveita ISENTOS_PF). Retorna true se o tipo e isento de IR para PF.
+function tipoEhIsento(tipo){ return _isElegivelIsencao(tipo); }
+
+// Compara uma lista de investimentos colocando TODOS na base de "CDB equivalente"
+// (taxa bruta equivalente em % do CDI), permitindo ranking justo.
+//  itens: [{ nome, tipo, taxaCDI (% do CDI), dias }]
+function compararPorGrossUp(itens){
+  if(!Array.isArray(itens) || !itens.length) return { erro: 'Informe ao menos um investimento.' };
+  var resultado = itens.map(function(it){
+    var isento = _isElegivelIsencao(it.tipo);
+    var aliq = aliquotaIR(it.dias);
+    var baseCDB; // taxa em % do CDI ja na base tributada (CDB equivalente)
+    if(isento){
+      baseCDB = it.taxaCDI / (1 - aliq); // gross-up
+    } else {
+      baseCDB = it.taxaCDI; // tributado ja esta na propria base bruta
+    }
+    return {
+      nome: it.nome || (it.tipo || '').toUpperCase(),
+      tipo: it.tipo,
+      isento: isento,
+      taxaInformada: round2(it.taxaCDI),
+      aliquotaIR: aliq,
+      cdbEquivalente: round2(baseCDB),
+      dias: it.dias
+    };
+  });
+  // ordena do melhor (maior CDB equivalente) para o pior
+  resultado.sort(function(a,b){ return b.cdbEquivalente - a.cdbEquivalente; });
+  if(resultado.length) resultado[0].vencedor = true;
+  return { itens: resultado, observacao: 'Cálculo de equivalência (gross-up) assume manutenção até o vencimento.' };
+}
+
 // ---------- Busca de indices acumulados no BACEN (CDI, Selic, IPCA) ----------
 // Series SGS: CDI=12 (diaria), Selic=11 (diaria), IPCA=433 (mensal).
 // Acumulacao por capitalizacao composta: produto de (1 + taxa_dia/100) - 1.
@@ -206,8 +276,17 @@ function cdiAcumulado(dataIni, dataFim){ return buscarIndiceAcumulado(12, dataIn
 function selicAcumulada(dataIni, dataFim){ return buscarIndiceAcumulado(11, dataIni, dataFim); }
 function ipcaAcumulado(dataIni, dataFim){ return buscarIndiceAcumulado(433, dataIni, dataFim); }
 
+// Mensagem padrao para quando o IPCA nao esta disponivel no periodo.
+// O assistente pode usar isso ao responder o usuario.
+var IPCA_INDISPONIVEL_MSG = 'O IPCA é um índice mensal, divulgado pelo IBGE por volta do dia 10 do mês seguinte. '
+  + 'Por isso, em períodos muito curtos (poucos dias) ou para um mês que ainda não fechou/foi divulgado, '
+  + 'o valor pode não estar disponível. Para prazos de alguns meses ou mais, o cálculo funciona normalmente. '
+  + 'Você também pode informar o IPCA manualmente se já souber.';
+
 // Export (para uso no app e em testes)
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { calcularRendaFixa, rendimentoPorTaxa, aliquotaIR, aliquotaIOF,
-                     buscarIndiceAcumulado, cdiAcumulado, selicAcumulada, ipcaAcumulado };
+                     buscarIndiceAcumulado, cdiAcumulado, selicAcumulada, ipcaAcumulado,
+                     IPCA_INDISPONIVEL_MSG,
+                     grossUp, grossDown, tipoEhIsento, compararPorGrossUp };
 }
