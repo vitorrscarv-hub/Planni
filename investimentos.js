@@ -167,7 +167,47 @@ function rendimentoPorTaxa(p){
 
 function round2(v){ return Math.round(v * 100) / 100; }
 
+// ---------- Busca de indices acumulados no BACEN (CDI, Selic, IPCA) ----------
+// Series SGS: CDI=12 (diaria), Selic=11 (diaria), IPCA=433 (mensal).
+// Acumulacao por capitalizacao composta: produto de (1 + taxa_dia/100) - 1.
+// A API ja retorna apenas dias uteis para CDI/Selic.
+function _formatBR(dataISO){
+  var p = dataISO.split('-');
+  return p[2] + '/' + p[1] + '/' + p[0];
+}
+
+async function buscarIndiceAcumulado(serie, dataIni, dataFim){
+  // serie: 12 (CDI), 11 (Selic), 433 (IPCA)
+  var url = 'https://api.bcb.gov.br/dados/serie/bcdata.sgs.' + serie +
+            '/dados?formato=json&dataInicial=' + _formatBR(dataIni) +
+            '&dataFinal=' + _formatBR(dataFim);
+  var resp = await fetch(url);
+  if(!resp.ok) throw new Error('BACEN HTTP ' + resp.status);
+  var dados = await resp.json();
+  if(!Array.isArray(dados) || !dados.length) throw new Error('Sem dados do BACEN no período.');
+
+  // Capitalizacao composta dos fatores diarios/mensais
+  var fator = 1;
+  dados.forEach(function(d){
+    var taxa = parseFloat(String(d.valor).replace(',', '.'));
+    if(!isNaN(taxa)) fator *= (1 + taxa/100);
+  });
+  var acumulado = (fator - 1) * 100; // em %
+  return {
+    acumulado: round2(acumulado),
+    pontos: dados.length,
+    primeiraData: dados[0].data,
+    ultimaData: dados[dados.length-1].data
+  };
+}
+
+// Atalhos por tipo de indice
+function cdiAcumulado(dataIni, dataFim){ return buscarIndiceAcumulado(12, dataIni, dataFim); }
+function selicAcumulada(dataIni, dataFim){ return buscarIndiceAcumulado(11, dataIni, dataFim); }
+function ipcaAcumulado(dataIni, dataFim){ return buscarIndiceAcumulado(433, dataIni, dataFim); }
+
 // Export (para uso no app e em testes)
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { calcularRendaFixa, rendimentoPorTaxa, aliquotaIR, aliquotaIOF };
+  module.exports = { calcularRendaFixa, rendimentoPorTaxa, aliquotaIR, aliquotaIOF,
+                     buscarIndiceAcumulado, cdiAcumulado, selicAcumulada, ipcaAcumulado };
 }
