@@ -6785,7 +6785,8 @@ var _INV_TIPOS = [
   {re:/\bcra\b/i, tipo:'cra', nome:'CRA', isento:true},
   {re:/deb[eê]nture\s+incentivada|incentivada/i, tipo:'debenture_incentivada', nome:'Debênture incentivada', isento:true},
   {re:/deb[eê]nture/i, tipo:'debenture', nome:'Debênture', isento:false},
-  {re:/tesouro\s*(ipca|selic|pref)/i, tipo:'tesouro', nome:'Tesouro', isento:false},
+  {re:/tesouro[_\s]*ipca/i, tipo:'tesouro_ipca', nome:'Tesouro IPCA+', isento:false, baseIPCA:true},
+  {re:/tesouro[_\s]*(selic|pref)/i, tipo:'tesouro', nome:'Tesouro', isento:false},
   {re:/\bcdb\b/i, tipo:'cdb', nome:'CDB', isento:false},
   {re:/\blc\b|letra\s+de\s+c[aâ]mbio/i, tipo:'lc', nome:'LC', isento:false},
   {re:/\blf\b|letra\s+financeira/i, tipo:'lf', nome:'LF', isento:false}
@@ -6835,6 +6836,13 @@ function _invNormalizar(msg){
   s = s.replace(/\bc\s*r\s*a\b/g, 'cra');
   s = s.replace(/\bc\s*d\s*b\b/g, 'cdb');
   s = s.replace(/\bl\s*f\b/g, 'lf');
+  // "crie"/"cri e"/"crie" = CRI (distorcao comum da voz)
+  s = s.replace(/\bcrie\b/g, 'cri').replace(/\bcri\s+e\b/g, 'cri').replace(/\bcriei\b/g, 'cri');
+  // "tesouro direto" -> "tesouro"; normaliza IPCA+ com numero ("ipca +7", "ipca mais 7")
+  s = s.replace(/tesouro\s+direto/g, 'tesouro');
+  s = s.replace(/ipca\s*\+\s*(\d+)/g, 'ipcamais$1');
+  s = s.replace(/ipca\s+mais\s+(\d+)/g, 'ipcamais$1');
+  s = s.replace(/tesouro\s+ipcamais/g, 'tesouro_ipca ').replace(/ipcamais(\d+)/g, 'tesouro_ipca $1');
   // siglas faladas por letra ("cê dê bê", "ele cê i") - sem \b pois acentos quebram o limite
   s = s.replace(/c[eê]\s*d[eê]\s*b[eê]/g, ' cdb ');
   s = s.replace(/ele\s*c[eê]\s*i/g, ' lci ');
@@ -6876,6 +6884,18 @@ function _tryLocalInvestimento(msg){
   if(!itens.length) return null;
   var dias = _invExtrairPrazoDias(norm) || 730; // default 2 anos
   itens.forEach(function(it){ it.dias = dias; });
+
+  // Detecta mistura de bases incompativeis: IPCA+ (real) vs % do CDI (pos-fixado)
+  var temIPCA = itens.some(function(it){ return it.baseIPCA; });
+  var temCDI = itens.some(function(it){ return !it.baseIPCA; });
+  if(temIPCA && temCDI){
+    return '⚖️ Comparar um título IPCA+ (que rende inflação + juros) com um título em % do CDI '
+      + 'exige uma premissa de quanto o CDI e o IPCA vão render no futuro — são bases diferentes. '
+      + 'Para uma comparação justa, me diga a sua expectativa de CDI e de IPCA para o período, '
+      + 'ou compare títulos da mesma base (ex: dois em % do CDI, ou dois IPCA+). '
+      + '\n\n💡 Dica para o cliente: títulos IPCA+ protegem da inflação; pós-fixados (% do CDI) acompanham a Selic. '
+      + 'A escolha depende do cenário de juros e do objetivo.';
+  }
 
   // COMPARACAO (2+ investimentos)
   if(itens.length >= 2){
