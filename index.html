@@ -6480,11 +6480,16 @@ function _startChatVoice(){
   _chatRecognition.lang='pt-BR';
   _chatRecognition.continuous=true;
   _chatRecognition.interimResults=true;
+  _chatRecognition.maxAlternatives=3;
   _chatRecognition.onresult=function(e){
     var finalTxt='', interim='';
     for(var i=e.resultIndex;i<e.results.length;i++){
-      if(e.results[i].isFinal) finalTxt+=e.results[i][0].transcript;
-      else interim+=e.results[i][0].transcript;
+      if(e.results[i].isFinal){
+        // escolhe a melhor alternativa (a 1a costuma ser a melhor, mas limpamos repeticoes)
+        finalTxt+=e.results[i][0].transcript;
+      } else {
+        interim+=e.results[i][0].transcript;
+      }
     }
     if(finalTxt) _chatBaseText+=finalTxt+' ';
     if(input) input.value=(_chatBaseText+interim).trim();
@@ -6492,6 +6497,27 @@ function _startChatVoice(){
   _chatRecognition.onerror=function(err){ if(err.error!=='no-speech') _stopChatVoice(false); };
   _chatRecognition.onend=function(){ if(_chatRecording){ try{ _chatRecognition.start(); }catch(e){} } };
   try{ _chatRecognition.start(); }catch(e){ _chatRecording=false; if(btn) btn.classList.remove('recording'); if(listening) listening.classList.remove('show'); }
+}
+
+// Remove palavras repetidas consecutivas da transcricao ("demais demais"->"demais")
+function _limparTranscricao(txt){
+  if(!txt) return txt;
+  // colapsa repeticoes imediatas da mesma palavra (case-insensitive)
+  return txt.replace(/\b(\w+)(\s+\1\b)+/gi, '$1').replace(/\s{2,}/g,' ').trim();
+}
+
+// Detecta se a transcricao parece corrompida/incompleta (para pedir revisao)
+function _transcricaoSuspeita(txt){
+  if(!txt) return true;
+  var t = txt.trim().toLowerCase();
+  // termina em preposicao/artigo solto (frase cortada): "...com um", "...do", "...de"
+  if(/\b(do|da|de|com|um|uma|e|ou|por|pra|para|no|na)$/.test(t)) return true;
+  // tinha palavra repetida (sinal de erro de voz)
+  if(/\b(\w+)\s+\1\b/i.test(txt)) return true;
+  // muito curta para um comando de investimento mas menciona investimento
+  var temInvest = /\b(cdb|lci|lca|cri|cra|tesouro|ipca|deb[eê]nture|cdi)\b/i.test(t);
+  if(temInvest && t.split(/\s+/).length < 4) return true;
+  return false;
 }
 
 // autoSend=true: ao parar a gravação, envia a mensagem automaticamente
@@ -6504,12 +6530,21 @@ function _stopChatVoice(autoSend){
   try{ if(_chatRecognition) _chatRecognition.stop(); }catch(e){}
   _updateChatBtn();
   var input=document.getElementById('ai-chat-input');
+  // limpa repeticoes da transcricao
+  if(input && input.value){ input.value = _limparTranscricao(input.value); }
   if(autoSend){
-    // Pequeno atraso garante que a última transcrição entrou no campo antes de enviar
+    // tempo maior garante que a ultima transcricao final entrou no campo
     setTimeout(function(){
-      if(input && input.value.trim().length>0){ aiChatSend(); }
-      else if(input){ input.focus(); }
-    }, 350);
+      if(input && input.value.trim().length>0){
+        // se a transcricao parece corrompida, NAO envia: deixa o usuario revisar
+        if(_transcricaoSuspeita(input.value)){
+          input.focus();
+          if(typeof toast==='function') toast('Confira o texto e toque em enviar');
+        } else {
+          aiChatSend();
+        }
+      } else if(input){ input.focus(); }
+    }, 800);
   } else if(input){
     input.focus();
   }
