@@ -6867,45 +6867,94 @@ function _invExtrairItens(msg){
 }
 
 // Normaliza a frase: "por cento"->"%", numeros por extenso comuns, "letra de credito"->LCI
+// Dicionario fonetico: como o reconhecimento de voz costuma errar cada termo financeiro.
+// Cada entrada: [regex de variacoes, termo correto]. Aplicado antes de interpretar.
+var _INV_FONETICO = [
+  // LCI - imobiliario
+  [/\bl\s*c\s*i\b/gi, 'lci'],
+  [/\bels?(?:i|e|ie)\b/gi, 'lci'],            // "elsie", "el ci"
+  [/ele\s*c[eê]\s*i/gi, 'lci'],
+  [/l[aá]\s*c[ií]/gi, 'lci'],                 // "laci" (sem \b)
+  [/letra\s+de\s+cr[eé]dito\s+imobili[aá]ri[ao]/gi, 'lci'],
+  [/\bhouse\s*e?\b/gi, 'lci'],                // iOS as vezes vira "house"
+  // LCA - agro
+  [/\bl\s*c\s*a\b/gi, 'lca'],
+  [/ele\s*c[eê]\s*[aá]/gi, 'lca'],
+  [/l[aá]\s*c[aá]/gi, 'lca'],                 // "lá cá" (sem \b)
+  [/letra\s+de\s+cr[eé]dito\s+do?\s+agro(?:neg[oó]cio)?/gi, 'lca'],
+  [/letra\s+de\s+cr[eé]dito\s+agr[ií]cola/gi, 'lca'],
+  // CDB
+  [/\bc\s*d\s*b\b/gi, 'cdb'],
+  [/c[eê]\s*d[eê]\s*b[eê]/gi, 'cdb'],         // "cê dê bê" (sem \b: acentos quebram)
+  [/\bcedeb[eê]?\b/gi, 'cdb'],
+  [/\bse\s*de\s*be\b/gi, 'cdb'],
+  [/certificado\s+de\s+dep[oó]sito(?:\s+banc[aá]rio)?/gi, 'cdb'],
+  // CRI - imobiliario
+  [/\bc\s*r\s*i\b/gi, 'cri'],
+  [/\bcri(?:e|ei)\b/gi, 'cri'],               // "crie", "criei"
+  [/\bcri\s+e\b/gi, 'cri'],
+  [/\bkr[ií]\b/gi, 'cri'],
+  // CRA - agro
+  [/\bc\s*r\s*a\b/gi, 'cra'],
+  [/\bkr[aá]\b/gi, 'cra'],
+  [/\bcr[aá]\b/gi, 'cra'],
+  // LC - letra de cambio (cuidado: so depois de LCI/LCA)
+  [/letra\s+de\s+c[aâ]mbio/gi, 'lc'],
+  // LF - letra financeira
+  [/\bl\s*f\b/gi, 'lf'],
+  [/letra\s+financeira/gi, 'lf'],
+  // Debenture
+  [/\bdeb[eê]ntures?\b/gi, 'debenture'],
+  [/\bde\s+bento\b/gi, 'debenture'],           // "de bento"
+  [/\bdebent[uo]ra\b/gi, 'debenture'],
+  // Tesouro
+  [/tesouro\s+direto/gi, 'tesouro'],
+  [/\bte\s*so[uo]ro\b/gi, 'tesouro'],
+  // IPCA
+  [/\bipca\b/gi, 'ipca'],
+  [/\bi\s*p\s*c\s*a\b/gi, 'ipca'],
+  [/\b[ií]\s*pec[aá]\b/gi, 'ipca'],            // "i pecá"
+  // Selic
+  [/\bselique?\b/gi, 'selic'],
+  // CDI
+  [/\bc\s*d\s*i\b/gi, 'cdi'],
+  [/\bc[eê]\s*d[eê]\s*[ií]\b/gi, 'cdi']
+];
+
 function _invNormalizar(msg){
   var s = ' ' + msg.toLowerCase() + ' ';
 
-  // CORRIGE SIGLAS QUEBRADAS PELA TRANSCRICAO DE VOZ
-  // "lc i"->"lci", "lc a"->"lca", "cr i"->"cri", "cr a"->"cra", "c d b"->"cdb"
-  s = s.replace(/\bl\s*c\s*i\b/g, 'lci');
-  s = s.replace(/\bl\s*c\s*a\b/g, 'lca');
-  s = s.replace(/\bc\s*r\s*i\b/g, 'cri');
-  s = s.replace(/\bc\s*r\s*a\b/g, 'cra');
-  s = s.replace(/\bc\s*d\s*b\b/g, 'cdb');
-  s = s.replace(/\bl\s*f\b/g, 'lf');
-  // "crie"/"cri e"/"crie" = CRI (distorcao comum da voz)
-  s = s.replace(/\bcrie\b/g, 'cri').replace(/\bcri\s+e\b/g, 'cri').replace(/\bcriei\b/g, 'cri');
-  // "tesouro direto" -> "tesouro"; normaliza IPCA+ com numero ("ipca +7", "ipca mais 7")
-  s = s.replace(/tesouro\s+direto/g, 'tesouro');
-  s = s.replace(/ipca\s*\+\s*(\d+)/g, 'ipcamais$1');
-  s = s.replace(/ipca\s+mais\s+(\d+)/g, 'ipcamais$1');
-  s = s.replace(/tesouro\s+ipcamais/g, 'tesouro_ipca ').replace(/ipcamais(\d+)/g, 'tesouro_ipca $1');
-  // siglas faladas por letra ("cê dê bê", "ele cê i") - sem \b pois acentos quebram o limite
-  s = s.replace(/c[eê]\s*d[eê]\s*b[eê]/g, ' cdb ');
-  s = s.replace(/ele\s*c[eê]\s*i/g, ' lci ');
-  s = s.replace(/ele\s*c[eê]\s*[aá]/g, ' lca ');
-  // IMPORTANTE: so trata "lc" sozinho como Letra de Cambio se NAO virou lci/lca acima
+  // 1) DICIONARIO FONETICO: corrige como a voz erra cada termo
+  _INV_FONETICO.forEach(function(par){
+    s = s.replace(par[0], ' ' + par[1] + ' ');
+  });
 
-  // numeros por extenso frequentes na fala (transcricao de voz)
+  // 2) "incentivada" perto de debenture
+  s = s.replace(/deb[eê]nture\s+incentivada|incentivada/gi, 'debenture_incentivada');
+
+  // 3) IPCA+ com numero ("ipca +7", "ipca mais 7", "ipca + 7")
+  s = s.replace(/ipca\s*\+\s*(\d+)/gi, 'ipcamais$1');
+  s = s.replace(/ipca\s+mais\s+(\d+)/gi, 'ipcamais$1');
+  s = s.replace(/tesouro\s+ipcamais/gi, 'tesouro_ipca ').replace(/ipcamais(\d+)/gi, 'tesouro_ipca $1');
+  // "tesouro ipca" sem numero tambem vira tesouro_ipca
+  s = s.replace(/tesouro\s+ipca\b/gi, 'tesouro_ipca');
+
+  // 4) numeros por extenso frequentes na fala
   var extenso = {
     'cem':'100','cento e dez':'110','cento e quinze':'115','cento e vinte':'120',
     'cento e cinco':'105','cento e trinta':'130','noventa':'90','noventa e cinco':'95',
     'noventa e oito':'98','noventa e dois':'92','noventa e sete':'97','oitenta e cinco':'85',
-    'cento e vinte e cinco':'125'
+    'cento e vinte e cinco':'125','cento e dezoito':'118','cento e dezesseis':'116'
   };
   Object.keys(extenso).sort(function(a,b){return b.length-a.length;}).forEach(function(p){
     s = s.replace(new RegExp('\\b'+p+'\\b','g'), extenso[p]);
   });
-  // "por cento" / "porcento" -> "%"
+
+  // 5) "por cento" -> "%"
   s = s.replace(/\s*por\s*cento\b/g, '%').replace(/\s*porcento\b/g, '%');
-  // "letra de credito imobiliario/agro" -> LCI/LCA (ajuda a voz)
-  s = s.replace(/letra\s+de\s+cr[eé]dito\s+imobili[aá]ri[ao]/g, 'lci');
-  s = s.replace(/letra\s+de\s+cr[eé]dito\s+do?\s+agro(?:neg[oó]cio)?/g, 'lca');
+
+  // 6) limpa espacos duplicados gerados pelas substituicoes
+  s = s.replace(/\s{2,}/g, ' ');
   return s;
 }
 
