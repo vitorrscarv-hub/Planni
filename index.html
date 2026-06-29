@@ -6786,7 +6786,9 @@ var _INV_TIPOS = [
   {re:/deb[eê]nture\s+incentivada|incentivada/i, tipo:'debenture_incentivada', nome:'Debênture incentivada', isento:true},
   {re:/deb[eê]nture/i, tipo:'debenture', nome:'Debênture', isento:false},
   {re:/tesouro\s*(ipca|selic|pref)/i, tipo:'tesouro', nome:'Tesouro', isento:false},
-  {re:/\bcdb\b/i, tipo:'cdb', nome:'CDB', isento:false}
+  {re:/\bcdb\b/i, tipo:'cdb', nome:'CDB', isento:false},
+  {re:/\blc\b|letra\s+de\s+c[aâ]mbio/i, tipo:'lc', nome:'LC', isento:false},
+  {re:/\blf\b|letra\s+financeira/i, tipo:'lf', nome:'LF', isento:false}
 ];
 
 // Extrai prazo em dias da frase ("2 anos", "18 meses", "730 dias")
@@ -6821,18 +6823,58 @@ function _invExtrairItens(msg){
   return itens;
 }
 
+// Normaliza a frase: "por cento"->"%", numeros por extenso comuns, "letra de credito"->LCI
+function _invNormalizar(msg){
+  var s = ' ' + msg.toLowerCase() + ' ';
+
+  // CORRIGE SIGLAS QUEBRADAS PELA TRANSCRICAO DE VOZ
+  // "lc i"->"lci", "lc a"->"lca", "cr i"->"cri", "cr a"->"cra", "c d b"->"cdb"
+  s = s.replace(/\bl\s*c\s*i\b/g, 'lci');
+  s = s.replace(/\bl\s*c\s*a\b/g, 'lca');
+  s = s.replace(/\bc\s*r\s*i\b/g, 'cri');
+  s = s.replace(/\bc\s*r\s*a\b/g, 'cra');
+  s = s.replace(/\bc\s*d\s*b\b/g, 'cdb');
+  s = s.replace(/\bl\s*f\b/g, 'lf');
+  // siglas faladas por letra ("cê dê bê", "ele cê i") - sem \b pois acentos quebram o limite
+  s = s.replace(/c[eê]\s*d[eê]\s*b[eê]/g, ' cdb ');
+  s = s.replace(/ele\s*c[eê]\s*i/g, ' lci ');
+  s = s.replace(/ele\s*c[eê]\s*[aá]/g, ' lca ');
+  // IMPORTANTE: so trata "lc" sozinho como Letra de Cambio se NAO virou lci/lca acima
+
+  // numeros por extenso frequentes na fala (transcricao de voz)
+  var extenso = {
+    'cem':'100','cento e dez':'110','cento e quinze':'115','cento e vinte':'120',
+    'cento e cinco':'105','cento e trinta':'130','noventa':'90','noventa e cinco':'95',
+    'noventa e oito':'98','noventa e dois':'92','noventa e sete':'97','oitenta e cinco':'85',
+    'cento e vinte e cinco':'125'
+  };
+  Object.keys(extenso).sort(function(a,b){return b.length-a.length;}).forEach(function(p){
+    s = s.replace(new RegExp('\\b'+p+'\\b','g'), extenso[p]);
+  });
+  // "por cento" / "porcento" -> "%"
+  s = s.replace(/\s*por\s*cento\b/g, '%').replace(/\s*porcento\b/g, '%');
+  // "letra de credito imobiliario/agro" -> LCI/LCA (ajuda a voz)
+  s = s.replace(/letra\s+de\s+cr[eé]dito\s+imobili[aá]ri[ao]/g, 'lci');
+  s = s.replace(/letra\s+de\s+cr[eé]dito\s+do?\s+agro(?:neg[oó]cio)?/g, 'lca');
+  return s;
+}
+
+// Formata numero com virgula decimal (padrao BR)
+function _invV(n){ return String(n).replace('.', ','); }
+
 function _tryLocalInvestimento(msg){
   if(typeof compararPorGrossUp !== 'function') return null; // motor nao carregado
-  var low = msg.toLowerCase();
+  var norm = _invNormalizar(msg);
+  var low = norm;
   // gatilhos de intencao
   var querComparar = /\b(compar[ae]|melhor|qual\s+rende|versus|\bvs\b|ou\s+(?:um|uma|a|o)\b)/i.test(low);
   var querCalcular = /\b(quanto\s+rende|rentabilidade|calcul[ae]|rende\s+quanto|l[ií]quido|gross\s*up|equival)/i.test(low);
   var temInvest = /\b(cdb|lci|lca|cri|cra|tesouro|deb[eê]nture|incentivada)\b/i.test(low);
   if(!temInvest || (!querComparar && !querCalcular)) return null;
 
-  var itens = _invExtrairItens(msg);
+  var itens = _invExtrairItens(norm);
   if(!itens.length) return null;
-  var dias = _invExtrairPrazoDias(msg) || 730; // default 2 anos
+  var dias = _invExtrairPrazoDias(norm) || 730; // default 2 anos
   itens.forEach(function(it){ it.dias = dias; });
 
   // COMPARACAO (2+ investimentos)
@@ -6843,8 +6885,8 @@ function _tryLocalInvestimento(msg){
     var txt = '📊 Comparativo (base CDB equivalente, prazo '+anos+' '+(dias===365?'ano':'anos')+'):\n\n';
     comp.itens.forEach(function(it,i){
       var medalha = it.vencedor ? '🏆 ' : (i+1)+'º ';
-      var equiv = it.isento ? ' → equivale a CDB '+it.cdbEquivalente+'% do CDI' : '';
-      txt += medalha + it.nome + ' ' + it.taxaInformada + '% do CDI' + (it.isento?' (isento)':'') + equiv + '\n';
+      var equiv = it.isento ? ' → equivale a CDB '+_invV(it.cdbEquivalente)+'% do CDI' : '';
+      txt += medalha + it.nome + ' ' + _invV(it.taxaInformada) + '% do CDI' + (it.isento?' (isento)':'') + equiv + '\n';
     });
     txt += '\n💡 ' + comp.itens[0].nome + ' é a melhor opção pela equivalência fiscal. ' + comp.observacao;
     return txt;
@@ -6855,15 +6897,15 @@ function _tryLocalInvestimento(msg){
   if(it.isento){
     var gu = grossUp(it.taxaCDI, dias);
     return '💰 '+it.nome+' '+it.taxaCDI+'% do CDI (isento de IR)\n\n'
-      + 'Com a isenção, equivale a um CDB tributado de '+gu.cdbEquivalente+'% do CDI '
+      + 'Com a isenção, equivale a um CDB tributado de '+_invV(gu.cdbEquivalente)+'% do CDI '
       + '(alíquota de '+(gu.aliquotaIR*100).toFixed(1).replace('.',',')+'% no prazo). '
-      + 'Ou seja: só vale a pena trocar por um CDB se ele pagar mais que '+gu.cdbEquivalente+'% do CDI.';
+      + 'Ou seja: só vale a pena trocar por um CDB se ele pagar mais que '+_invV(gu.cdbEquivalente)+'% do CDI.';
   } else {
     var gd = grossDown(it.taxaCDI, dias);
     return '💰 '+it.nome+' '+it.taxaCDI+'% do CDI (tributado)\n\n'
       + 'Descontando o IR de '+(gd.aliquotaIR*100).toFixed(1).replace('.',',')+'% no prazo, '
-      + 'equivale a um isento (LCI/LCA) de '+gd.lciEquivalente+'% do CDI. '
-      + 'Uma LCI só ganha desse CDB se pagar mais que '+gd.lciEquivalente+'% do CDI.';
+      + 'equivale a um isento (LCI/LCA) de '+_invV(gd.lciEquivalente)+'% do CDI. '
+      + 'Uma LCI só ganha desse CDB se pagar mais que '+_invV(gd.lciEquivalente)+'% do CDI.';
   }
 }
 
