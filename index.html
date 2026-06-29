@@ -1881,6 +1881,7 @@ function hideSplash(){
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="investimentos.js"></script>
 <script>
 var firebaseConfig = {
   apiKey: "AIzaSyDskCXYYTAIvzldZNOXP4l4PpKuIdBF3_4",
@@ -6774,6 +6775,98 @@ function _tryLocalCreate(msg){
   return null;
 }
 
+// ===== CALCULADORA DE INVESTIMENTOS LOCAL (sem IA, preciso e privado) =====
+// Detecta pedidos de calculo/comparacao de renda fixa e responde pelo motor investimentos.js.
+// Mapa de tipos reconhecidos na frase
+var _INV_TIPOS = [
+  {re:/\blci\b/i, tipo:'lci', nome:'LCI', isento:true},
+  {re:/\blca\b/i, tipo:'lca', nome:'LCA', isento:true},
+  {re:/\bcri\b/i, tipo:'cri', nome:'CRI', isento:true},
+  {re:/\bcra\b/i, tipo:'cra', nome:'CRA', isento:true},
+  {re:/deb[eê]nture\s+incentivada|incentivada/i, tipo:'debenture_incentivada', nome:'Debênture incentivada', isento:true},
+  {re:/deb[eê]nture/i, tipo:'debenture', nome:'Debênture', isento:false},
+  {re:/tesouro\s*(ipca|selic|pref)/i, tipo:'tesouro', nome:'Tesouro', isento:false},
+  {re:/\bcdb\b/i, tipo:'cdb', nome:'CDB', isento:false}
+];
+
+// Extrai prazo em dias da frase ("2 anos", "18 meses", "730 dias")
+function _invExtrairPrazoDias(msg){
+  var m;
+  if((m = msg.match(/(\d+(?:[.,]\d+)?)\s*anos?/i))) return Math.round(parseFloat(m[1].replace(',','.'))*365);
+  if((m = msg.match(/(\d+)\s*meses?/i))) return Math.round(parseInt(m[1],10)*30.4);
+  if((m = msg.match(/(\d+)\s*dias?/i))) return parseInt(m[1],10);
+  return null;
+}
+
+// Encontra todos os investimentos citados na frase, com suas taxas (% do CDI)
+function _invExtrairItens(msg){
+  var itens = [];
+  // procura padroes "<tipo> ... <numero>%" ou "<tipo> de <numero>"
+  _INV_TIPOS.forEach(function(t){
+    var idx = msg.search(t.re);
+    while(idx !== -1){
+      // procura um numero (taxa) ate ~25 chars depois do tipo
+      var trecho = msg.slice(idx, idx+40);
+      var mt = trecho.match(/(\d+(?:[.,]\d+)?)\s*%?/);
+      if(mt){
+        itens.push({ tipo:t.tipo, nome:t.nome, isento:t.isento, taxaCDI:parseFloat(mt[1].replace(',','.')) });
+      }
+      // evita loop infinito: corta a parte ja vista
+      var resto = msg.slice(idx+1);
+      var idx2 = resto.search(t.re);
+      idx = idx2===-1 ? -1 : idx+1+idx2;
+      if(itens.length>6) break;
+    }
+  });
+  return itens;
+}
+
+function _tryLocalInvestimento(msg){
+  if(typeof compararPorGrossUp !== 'function') return null; // motor nao carregado
+  var low = msg.toLowerCase();
+  // gatilhos de intencao
+  var querComparar = /\b(compar[ae]|melhor|qual\s+rende|versus|\bvs\b|ou\s+(?:um|uma|a|o)\b)/i.test(low);
+  var querCalcular = /\b(quanto\s+rende|rentabilidade|calcul[ae]|rende\s+quanto|l[ií]quido|gross\s*up|equival)/i.test(low);
+  var temInvest = /\b(cdb|lci|lca|cri|cra|tesouro|deb[eê]nture|incentivada)\b/i.test(low);
+  if(!temInvest || (!querComparar && !querCalcular)) return null;
+
+  var itens = _invExtrairItens(msg);
+  if(!itens.length) return null;
+  var dias = _invExtrairPrazoDias(msg) || 730; // default 2 anos
+  itens.forEach(function(it){ it.dias = dias; });
+
+  // COMPARACAO (2+ investimentos)
+  if(itens.length >= 2){
+    var comp = compararPorGrossUp(itens);
+    if(comp.erro) return null;
+    var anos = (dias/365).toFixed(dias%365===0?0:1).replace('.',',');
+    var txt = '📊 Comparativo (base CDB equivalente, prazo '+anos+' '+(dias===365?'ano':'anos')+'):\n\n';
+    comp.itens.forEach(function(it,i){
+      var medalha = it.vencedor ? '🏆 ' : (i+1)+'º ';
+      var equiv = it.isento ? ' → equivale a CDB '+it.cdbEquivalente+'% do CDI' : '';
+      txt += medalha + it.nome + ' ' + it.taxaInformada + '% do CDI' + (it.isento?' (isento)':'') + equiv + '\n';
+    });
+    txt += '\n💡 ' + comp.itens[0].nome + ' é a melhor opção pela equivalência fiscal. ' + comp.observacao;
+    return txt;
+  }
+
+  // CALCULO SIMPLES (1 investimento) - precisa de gross-up/equivalencia
+  var it = itens[0];
+  if(it.isento){
+    var gu = grossUp(it.taxaCDI, dias);
+    return '💰 '+it.nome+' '+it.taxaCDI+'% do CDI (isento de IR)\n\n'
+      + 'Com a isenção, equivale a um CDB tributado de '+gu.cdbEquivalente+'% do CDI '
+      + '(alíquota de '+(gu.aliquotaIR*100).toFixed(1).replace('.',',')+'% no prazo). '
+      + 'Ou seja: só vale a pena trocar por um CDB se ele pagar mais que '+gu.cdbEquivalente+'% do CDI.';
+  } else {
+    var gd = grossDown(it.taxaCDI, dias);
+    return '💰 '+it.nome+' '+it.taxaCDI+'% do CDI (tributado)\n\n'
+      + 'Descontando o IR de '+(gd.aliquotaIR*100).toFixed(1).replace('.',',')+'% no prazo, '
+      + 'equivale a um isento (LCI/LCA) de '+gd.lciEquivalente+'% do CDI. '
+      + 'Uma LCI só ganha desse CDB se pagar mais que '+gd.lciEquivalente+'% do CDI.';
+  }
+}
+
 async function aiChatSend(){
   // Se estiver gravando, para antes de enviar
   if(_chatRecording) _stopChatVoice();
@@ -6808,6 +6901,15 @@ async function aiChatSend(){
     // Marca no historico que JA foi executado, para a IA nunca reprocessar este comando
     _aiChatHistory.push({role:'user',text:msg});
     _aiChatHistory.push({role:'model',text:'(transação já registrada pelo app, nenhuma ação adicional necessária)'});
+    return;
+  }
+
+  // CALCULADORA DE INVESTIMENTOS LOCAL: comparar/calcular renda fixa sem IA (preciso e privado)
+  var invAns = _tryLocalInvestimento(msg);
+  if(invAns){
+    _localReply(invAns);
+    _aiChatHistory.push({role:'user',text:msg});
+    _aiChatHistory.push({role:'model',text:invAns});
     return;
   }
 
