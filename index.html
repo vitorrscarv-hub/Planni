@@ -6464,6 +6464,8 @@ function _chatBtnTap(){
 var _chatRecognition=null;
 var _chatRecording=false;
 var _chatBaseText='';
+var _chatVoicePrefix=''; // texto fixo antes da fala (edicao manual ou texto pre-existente)
+var _chatFinalText='';   // texto final reconstruido a cada evento (evita duplicacao Android)
 var _chatManualEdit=false; // marca quando o usuario edita o campo manualmente durante a gravacao
 var _chatWriting=false; // true enquanto o reconhecimento escreve no campo (evita falso positivo de edicao)
 
@@ -6475,7 +6477,8 @@ function _startChatVoice(){
   if(!SR){ toast('Reconhecimento de voz não suportado neste navegador'); return; }
   _chatRecording=true;
   _chatManualEdit=false; _chatWriting=false;
-  _chatBaseText=(input&&input.value)?input.value+' ':'';
+  _chatVoicePrefix=(input&&input.value)?input.value+' ':'';
+  _chatFinalText='';
   if(btn) btn.classList.add('recording');
   if(listening) listening.classList.add('show');
   _updateChatBtn();
@@ -6485,24 +6488,37 @@ function _startChatVoice(){
   _chatRecognition.interimResults=true;
   _chatRecognition.maxAlternatives=3;
   _chatRecognition.onresult=function(e){
-    // Se o usuario editou o campo manualmente, ressincroniza a base antes de continuar
+    // Se o usuario editou o campo manualmente, guarda esse texto como prefixo fixo
     if(_chatManualEdit && input){
-      _chatBaseText = input.value ? input.value + ' ' : '';
+      _chatVoicePrefix = input.value ? input.value + ' ' : '';
       _chatManualEdit = false;
+      _chatFinalText = ''; // reinicia a captura de voz a partir da edicao
     }
+    // RECONSTRUI o texto a cada evento (evita duplicacao no Android, que reemite finais).
+    // Percorre TODOS os resultados, montando final + interim do zero.
     var finalTxt='', interim='';
-    for(var i=e.resultIndex;i<e.results.length;i++){
+    for(var i=0;i<e.results.length;i++){
       if(e.results[i].isFinal){
-        finalTxt+=e.results[i][0].transcript;
+        finalTxt += e.results[i][0].transcript + ' ';
       } else {
-        interim+=e.results[i][0].transcript;
+        interim += e.results[i][0].transcript;
       }
     }
-    if(finalTxt) _chatBaseText+=finalTxt+' ';
-    if(input){ _chatWriting=true; input.value=(_chatBaseText+interim).trim(); _chatWriting=false; }
+    _chatFinalText = finalTxt; // sempre o conjunto completo, nao acumulado
+    if(input){
+      _chatWriting=true;
+      input.value=(_chatVoicePrefix + _chatFinalText + interim).replace(/\s{2,}/g,' ').trim();
+      _chatWriting=false;
+    }
   };
   _chatRecognition.onerror=function(err){ if(err.error!=='no-speech') _stopChatVoice(false); };
-  _chatRecognition.onend=function(){ if(_chatRecording){ try{ _chatRecognition.start(); }catch(e){} } };
+  _chatRecognition.onend=function(){
+    if(_chatRecording){
+      // ao reiniciar, o e.results zera: consolida o que ja foi falado no prefixo
+      if(_chatFinalText){ _chatVoicePrefix = (_chatVoicePrefix + _chatFinalText).replace(/\s{2,}/g,' '); _chatFinalText=''; }
+      try{ _chatRecognition.start(); }catch(e){}
+    }
+  };
   try{ _chatRecognition.start(); }catch(e){ _chatRecording=false; if(btn) btn.classList.remove('recording'); if(listening) listening.classList.remove('show'); }
 }
 
