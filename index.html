@@ -6486,40 +6486,54 @@ function _startChatVoice(){
   _chatRecognition.lang='pt-BR';
   _chatRecognition.continuous=true;
   _chatRecognition.interimResults=true;
-  _chatRecognition.maxAlternatives=3;
+  _chatRecognition.maxAlternatives=1;
   _chatRecognition.onresult=function(e){
-    // Se o usuario editou o campo manualmente, guarda esse texto como prefixo fixo
     if(_chatManualEdit && input){
       _chatVoicePrefix = input.value ? input.value + ' ' : '';
       _chatManualEdit = false;
-      _chatFinalText = ''; // reinicia a captura de voz a partir da edicao
     }
-    // RECONSTRUI o texto a cada evento (evita duplicacao no Android, que reemite finais).
-    // Percorre TODOS os resultados, montando final + interim do zero.
+    // Reconstroi SEMPRE do indice 0, montando final + interim do array atual.
     var finalTxt='', interim='';
     for(var i=0;i<e.results.length;i++){
-      if(e.results[i].isFinal){
-        finalTxt += e.results[i][0].transcript + ' ';
-      } else {
-        interim += e.results[i][0].transcript;
-      }
+      if(e.results[i].isFinal) finalTxt += e.results[i][0].transcript + ' ';
+      else interim += e.results[i][0].transcript;
     }
-    _chatFinalText = finalTxt; // sempre o conjunto completo, nao acumulado
+    _chatFinalText = _dedupFrase(finalTxt);
     if(input){
       _chatWriting=true;
-      input.value=(_chatVoicePrefix + _chatFinalText + interim).replace(/\s{2,}/g,' ').trim();
+      input.value=_dedupFrase((_chatVoicePrefix + _chatFinalText + interim)).trim();
       _chatWriting=false;
     }
   };
   _chatRecognition.onerror=function(err){ if(err.error!=='no-speech') _stopChatVoice(false); };
+  // NAO reinicia automaticamente (o auto-restart causava acumulo/duplicacao no Android).
   _chatRecognition.onend=function(){
     if(_chatRecording){
-      // ao reiniciar, o e.results zera: consolida o que ja foi falado no prefixo
-      if(_chatFinalText){ _chatVoicePrefix = (_chatVoicePrefix + _chatFinalText).replace(/\s{2,}/g,' '); _chatFinalText=''; }
-      try{ _chatRecognition.start(); }catch(e){}
+      _chatRecording=false;
+      var b=document.getElementById('ai-chat-send'); if(b) b.classList.remove('recording');
+      var l=document.getElementById('ai-chat-listening'); if(l) l.classList.remove('show');
+      _updateChatBtn();
     }
   };
   try{ _chatRecognition.start(); }catch(e){ _chatRecording=false; if(btn) btn.classList.remove('recording'); if(listening) listening.classList.remove('show'); }
+}
+
+// Remove trechos/frases repetidas que o Android gera na transcricao continua.
+// Ex: "faça um comparativo com uma lci de 97% com uma lci de 97%" -> "...uma lci de 97%"
+function _dedupFrase(txt){
+  if(!txt) return '';
+  var s = ' ' + txt + ' ';
+  // remove pontos no meio (o Android insere "." entre reemissoes)
+  s = s.replace(/\s*\.\s*/g, ' ');
+  // colapsa palavras repetidas imediatas ("faça faça"->"faça")
+  s = s.replace(/\b(\w+)(\s+\1\b)+/gi, '$1');
+  // colapsa sequencias de 2-8 palavras repetidas, varias passadas
+  for(var p=0;p<5;p++){
+    s = s.replace(/\b(\w+(?:\s+\w+){1,8}?)(\s+\1\b)+/gi, '$1');
+  }
+  // colapsa de novo palavras imediatas que sobraram
+  s = s.replace(/\b(\w+)(\s+\1\b)+/gi, '$1');
+  return s.replace(/\s{2,}/g,' ').trim();
 }
 
 // Remove palavras repetidas consecutivas da transcricao ("demais demais"->"demais")
