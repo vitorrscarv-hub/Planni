@@ -1676,7 +1676,9 @@ function hideSplash(){
     <button class="btn btn-ghost" onclick="cycleFontScale()" style="margin-bottom:12px;padding:10px;font-size:11px;display:flex;align-items:center;justify-content:center;gap:8px">
       🔠 Tamanho da fonte <span id="fontscale-label" style="font-weight:900;color:var(--sky);font-size:14px">A</span>
     </button>
+    <button class="btn btn-ghost" onclick="exportarMeusDados()" style="margin-bottom:10px;font-size:12px">📥 Exportar meus dados (LGPD)</button>
     <button class="btn btn-ghost" onclick="resetAccountData()" style="margin-bottom:10px;color:var(--red);font-size:12px">🗑 Zerar todos os meus dados</button>
+    <button class="btn btn-ghost" onclick="excluirMinhaConta()" style="margin-bottom:10px;color:var(--red);font-size:12px">⚠️ Excluir minha conta permanentemente</button>
     <button class="btn btn-danger" onclick="logout()" style="margin-bottom:10px">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px;vertical-align:middle"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
       Sair da Conta
@@ -5432,6 +5434,78 @@ function resetAccountData(){
     closeProfileModal();
     toast('✓ Dados zerados com sucesso');
   }).catch(function(e){ toast('Erro ao zerar: '+e.message); });
+}
+
+// ===== LGPD: Exportar dados e Excluir conta =====
+
+// Baixa um JSON com todos os dados do usuario (portabilidade - LGPD art. 18)
+function exportarMeusDados(){
+  try{
+    var pacote = {
+      exportadoEm: new Date().toISOString(),
+      app: 'Planni',
+      conta: {
+        uid: (currentUser && currentUser.uid) || null,
+        email: (currentUser && currentUser.email) || null,
+        nome: (auth.currentUser && auth.currentUser.displayName) || null
+      },
+      dados: {
+        events: state.events || [],
+        transactions: state.transactions || [],
+        notes: state.notes || [],
+        tasks: state.tasks || [],
+        bills: state.bills || [],
+        investments: state.investments || [],
+        goals: state.goals || [],
+        customCats: state.customCats || [],
+        noteFolders: state.noteFolders || []
+      }
+    };
+    var content = JSON.stringify(pacote, null, 2);
+    var blob = new Blob([content], {type:'application/json'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'planni-meus-dados-' + new Date().toISOString().slice(0,10) + '.json';
+    a.click();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+    try{ logAuditEvent('exportar_dados', {}); }catch(e){}
+    toast('✓ Seus dados foram exportados');
+  }catch(e){ toast('Erro ao exportar: '+e.message); }
+}
+
+// Exclui a conta permanentemente, com confirmacao dupla (LGPD art. 18 - eliminacao)
+function excluirMinhaConta(){
+  var c1 = prompt('⚠️ ATENÇÃO: isto vai apagar PERMANENTEMENTE sua conta e todos os seus dados. Esta ação NÃO pode ser desfeita.\n\nPara confirmar, digite: EXCLUIR');
+  if(c1 === null) return; // cancelou
+  if(c1.trim().toUpperCase() !== 'EXCLUIR'){ toast('Confirmação incorreta. Conta não excluída.'); return; }
+  if(!currentUser || !currentUser.uid){ toast('Você precisa estar logado.'); return; }
+
+  toast('Excluindo sua conta...');
+  var uid = currentUser.uid;
+  // 1) Apaga os dados no Firestore (state + doc do usuario)
+  var p1 = db.collection('users').doc(uid).collection('data').doc('state').delete().catch(function(){});
+  Promise.resolve(p1).then(function(){
+    return db.collection('users').doc(uid).delete().catch(function(){});
+  }).then(function(){
+    try{ logAuditEvent('excluir_conta', {}); }catch(e){}
+    // 2) Apaga a conta de autenticacao
+    return auth.currentUser.delete();
+  }).then(function(){
+    // 3) Limpa o local e volta ao login
+    try{ localStorage.clear(); }catch(e){}
+    currentUser = null;
+    state = _emptyState();
+    try{ closeProfileModal(); }catch(e){}
+    showLoginScreen();
+    toast('Sua conta foi excluída. Sentiremos sua falta.');
+  }).catch(function(e){
+    if(e && e.code === 'auth/requires-recent-login'){
+      toast('Por segurança, saia e entre novamente antes de excluir a conta.');
+    } else {
+      toast('Erro ao excluir: ' + (e.message||e));
+    }
+  });
 }
 
 function logout(){
