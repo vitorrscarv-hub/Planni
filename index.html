@@ -6772,6 +6772,111 @@ function _localReply(text){
   }, delay);
 }
 
+var _ultimaComparacaoChat = null;
+
+// Resposta com botao "Baixar PDF" abaixo do texto (para comparativos)
+function _localReplyComPDF(text){
+  _ensureJsPDF(); // pre-carrega a lib enquanto o usuario le o resultado
+  var typing = _aiAddBubble('digitando...','ai-typing');
+  var delay = 1400 + Math.floor(Math.random()*1400);
+  setTimeout(function(){
+    if(typing) typing.remove();
+    var bubble = _aiAddBubble(text,'ai-bot');
+    if(bubble){
+      var btn = document.createElement('button');
+      btn.textContent = '📄 Baixar relatório em PDF';
+      btn.style.cssText = 'margin-top:10px;border:none;border-radius:100px;padding:10px 16px;font-weight:800;font-size:13px;color:#fff;background:linear-gradient(160deg,#c9962f,#a87a1e);cursor:pointer;display:block';
+      btn.onclick = _gerarPDFchat;
+      bubble.appendChild(btn);
+    }
+  }, delay);
+}
+
+// Gera o PDF da ultima comparacao feita no chat (marca Planni, sem nome do assessor)
+function _gerarPDFchat(){
+  if(!_ultimaComparacaoChat){ toast('Faça uma comparação primeiro.'); return; }
+  if(!window.jspdf || !window.jspdf.jsPDF){ toast('Carregando gerador de PDF, tente de novo em 2s.'); _ensureJsPDF(); return; }
+  var comp = _ultimaComparacaoChat.comp;
+  var anos = _ultimaComparacaoChat.anos;
+  var jsPDF = window.jspdf.jsPDF;
+  var doc = new jsPDF({ unit:'mm', format:'a4' });
+  var W=210, M=16, y=0;
+  var PETROL=[28,74,110], BLUE=[45,108,151], GOLD=[201,150,47], GREY=[90,107,124], INK=[26,43,60], SOFT=[220,232,243];
+
+  doc.setFillColor(PETROL[0],PETROL[1],PETROL[2]); doc.rect(0,0,W,32,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFont('helvetica','bold'); doc.setFontSize(20); doc.text('Planni', M, 16);
+  doc.setFont('helvetica','normal'); doc.setFontSize(11);
+  doc.text('Análise Comparativa de Investimentos', M, 24);
+  doc.setFontSize(8);
+  var hoje = new Date().toLocaleDateString('pt-BR');
+  doc.text('Emitido em '+hoje, W-M, 16, {align:'right'});
+  y = 44;
+
+  var venc = comp.itens[0];
+  doc.setFillColor(255,248,232); doc.setDrawColor(GOLD[0],GOLD[1],GOLD[2]);
+  doc.roundedRect(M, y, W-2*M, 16, 2,2,'FD');
+  doc.setTextColor(120,94,16); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text('Melhor opção: '+venc.nome, M+4, y+7);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  var subVenc = venc.isento
+    ? 'Isento de IR · equivale a um CDB de '+_invV(venc.cdbEquivalente)+'% do CDI (gross-up)'
+    : 'Tributado · '+_invV(venc.taxaInformada)+'% do CDI';
+  doc.text(subVenc, M+4, y+12.5);
+  y += 24;
+
+  doc.setTextColor(PETROL[0],PETROL[1],PETROL[2]); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text('Comparativo (prazo '+anos+' anos)', M, y); y+=6;
+
+  var colX=[M, M+55, M+95, M+135];
+  doc.setFillColor(BLUE[0],BLUE[1],BLUE[2]); doc.rect(M, y-4, W-2*M, 7,'F');
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
+  ['Investimento','Tipo','Taxa','CDB equiv.'].forEach(function(c,i){ doc.text(c, colX[i], y); });
+  y+=5;
+  doc.setTextColor(INK[0],INK[1],INK[2]); doc.setFontSize(8.5);
+  comp.itens.forEach(function(it,idx){
+    if(idx%2===0){ doc.setFillColor(238,244,250); doc.rect(M, y-4, W-2*M, 7,'F'); }
+    doc.setFont('helvetica', it.vencedor?'bold':'normal');
+    doc.text(String(it.nome).substring(0,24), colX[0], y);
+    doc.text(it.isento?'Isento':'Tributado', colX[1], y);
+    doc.text(_invV(it.taxaInformada)+'%', colX[2], y);
+    doc.text(it.isento? _invV(it.cdbEquivalente)+'%' : '—', colX[3], y);
+    y+=7;
+  });
+  y+=6;
+
+  doc.setDrawColor(SOFT[0],SOFT[1],SOFT[2]); doc.line(M,y,W-M,y); y+=6;
+  doc.setTextColor(GREY[0],GREY[1],GREY[2]); doc.setFont('helvetica','bold'); doc.setFontSize(9);
+  doc.text('Pressupostos', M, y); y+=5;
+  doc.setFont('helvetica','normal'); doc.setFontSize(8);
+  ['Alíquotas de IR pela tabela regressiva vigente (22,5% a 15% conforme prazo).',
+   'Cálculo de equivalência (gross-up) assume manutenção até o vencimento.'].forEach(function(p){
+    var l=doc.splitTextToSize('• '+p, W-2*M); doc.text(l, M, y); y+=l.length*4.2;
+  });
+  y+=4;
+
+  doc.setFillColor(245,248,252); doc.roundedRect(M, y, W-2*M, 20, 2,2,'F');
+  doc.setTextColor(GREY[0],GREY[1],GREY[2]); doc.setFont('helvetica','italic'); doc.setFontSize(7.5);
+  var disc='Este material tem caráter exclusivamente informativo e educacional e não constitui recomendação de investimento, oferta ou consultoria. Rentabilidade passada não garante resultados futuros. Consulte um profissional certificado antes de decidir.';
+  doc.text(doc.splitTextToSize(disc, W-2*M-6), M+3, y+5);
+
+  doc.setTextColor(GREY[0],GREY[1],GREY[2]); doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
+  doc.text('Relatório gerado com Planni · planni.pages.dev', M, 287);
+  doc.text(hoje, W-M, 287, {align:'right'});
+
+  doc.save('Comparativo_Planni_'+hoje.replace(/\//g,'-')+'.pdf');
+}
+
+// Carrega o jsPDF sob demanda (so quando o usuario pede PDF)
+function _ensureJsPDF(){
+  if(window.jspdf && window.jspdf.jsPDF) return;
+  if(document.getElementById('jspdf-lib')) return;
+  var s=document.createElement('script');
+  s.id='jspdf-lib';
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+  document.head.appendChild(s);
+}
+
 // Criacao local de tarefa / nota / evento, SEM IA.
 // Retorna a string de confirmacao, ou null se nao reconheceu o comando.
 function _tryLocalCreate(msg){
@@ -7017,7 +7122,9 @@ function _tryLocalInvestimento(msg){
       txt += medalha + it.nome + ' ' + _invV(it.taxaInformada) + '% do CDI' + (it.isento?' (isento)':'') + equiv + '\n';
     });
     txt += '\n💡 ' + comp.itens[0].nome + ' é a melhor opção pela equivalência fiscal. ' + comp.observacao;
-    return txt;
+    // guarda para gerar PDF a pedido do usuario (botao no balao)
+    _ultimaComparacaoChat = { comp:comp, dias:dias, anos:anos };
+    return { texto: txt, pdf:true };
   }
 
   // CALCULO SIMPLES (1 investimento) - precisa de gross-up/equivalencia
@@ -7077,9 +7184,12 @@ async function aiChatSend(){
   // CALCULADORA DE INVESTIMENTOS LOCAL: comparar/calcular renda fixa sem IA (preciso e privado)
   var invAns = _tryLocalInvestimento(msg);
   if(invAns){
-    _localReply(invAns);
+    var invTexto = (typeof invAns==='object') ? invAns.texto : invAns;
+    var temPDF = (typeof invAns==='object') && invAns.pdf;
+    if(temPDF){ _localReplyComPDF(invTexto); }
+    else { _localReply(invTexto); }
     _aiChatHistory.push({role:'user',text:msg});
-    _aiChatHistory.push({role:'model',text:invAns});
+    _aiChatHistory.push({role:'model',text:invTexto});
     return;
   }
 
