@@ -4909,44 +4909,41 @@ function refreshGroupEvents(){
 }
 var PREMIUM_SCREENS = ['invest','agenda','finance','reports'];
 var PREMIUM_TASK_LIMIT = 10; // máx de tarefas ativas no plano gratuito
-var PREMIUM_TEST_CODE = 'VITOR2025';
 var isPremium = false;
+var _premiumUnsub = null;
 
 function initPremium(){
-  // 1. Checa localStorage imediatamente (resposta rápida pra não piscar)
+  // 1. Cache de UI: usa o ultimo valor conhecido so para nao piscar na abertura.
+  //    NAO e fonte de verdade — o Firestore sobrescreve assim que responde.
   var saved = localStorage.getItem('claudio_premium');
-  isPremium = (saved === 'true' || saved === PREMIUM_TEST_CODE);
+  isPremium = (saved === 'true');
   applyPremiumState();
-  // 2. Valida com Firebase (source of truth)
+  // 2. Fonte da verdade: Firestore (gravado só pelo webhook Hotmart).
   if(typeof currentUser !== 'undefined' && currentUser && currentUser.uid){
     _syncPremiumFromFirebase(currentUser.uid);
   }
 }
 
+// Listener em tempo real: quando o webhook Hotmart marca premium no Firestore,
+// a UI destrava sozinha, sem reload. O cliente apenas LE este campo.
 function _syncPremiumFromFirebase(uid){
   try{
-    firebase.firestore().collection('users').doc(uid).get().then(function(doc){
-      if(!doc.exists) return;
-      var data = doc.data();
-      var premiumFirebase = !!(data && data.premium);
-      // Firebase é a fonte da verdade
-      isPremium = premiumFirebase;
-      localStorage.setItem('claudio_premium', isPremium ? 'true' : 'false');
-      applyPremiumState();
-    }).catch(function(e){ console.warn('Premium sync:', e); });
+    if(_premiumUnsub){ _premiumUnsub(); _premiumUnsub = null; }
+    _premiumUnsub = firebase.firestore().collection('users').doc(uid)
+      .onSnapshot(function(doc){
+        var data = doc.exists ? doc.data() : null;
+        isPremium = !!(data && data.premium); // Firestore e a fonte da verdade
+        localStorage.setItem('claudio_premium', isPremium ? 'true' : 'false'); // so cache de UI
+        applyPremiumState();
+      }, function(e){ console.warn('Premium sync:', e); });
   }catch(e){}
 }
 
+// O cliente NAO grava premium (isso e feito so pelo webhook Hotmart no servidor).
+// Esta funcao agora so ajusta a UI localmente enquanto o Firestore nao responde.
 function setPremiumStatus(value){
   isPremium = !!value;
-  localStorage.setItem('claudio_premium', isPremium ? 'true' : 'false');
-  // Persiste no Firebase
-  try{
-    if(currentUser && currentUser.uid){
-      firebase.firestore().collection('users').doc(currentUser.uid)
-        .set({ premium: isPremium }, { merge: true });
-    }
-  }catch(e){}
+  localStorage.setItem('claudio_premium', isPremium ? 'true' : 'false'); // cache de UI apenas
   applyPremiumState();
 }
 
@@ -4984,22 +4981,8 @@ function _applyTaskLimit(){
 function openPremiumModal(){ document.getElementById('premium-modal').classList.add('show'); }
 function closePremiumModal(){ document.getElementById('premium-modal').classList.remove('show'); }
 
-function activatePremiumTest(){
-  setPremiumStatus(true);
-  closePremiumModal();
-  toast('✦ Premium ativado! Bem-vindo ao Planni Premium.');
-}
-
-function activatePremiumCode(){
-  var code = prompt('Digite o código de acesso Premium:');
-  if(code && code.toUpperCase() === PREMIUM_TEST_CODE){
-    setPremiumStatus(true);
-    closePremiumModal();
-    toast('✦ Código válido! Premium ativado.');
-  } else if(code){
-    toast('Código inválido.');
-  }
-}
+// A ativação do Premium acontece exclusivamente pela compra na Hotmart.
+// O webhook grava o status no Firestore e a UI destrava sozinha (listener).
 
 // ═══════════════════════════════════════
 // INIT
@@ -7314,9 +7297,6 @@ init();
     <button class="btn-premium" onclick="window.open('https://pay.hotmart.com/H106430069Y','_blank')">✦ Assinar agora — R$19,90/mês</button>
     <div style="margin-top:10px;text-align:center">
       <span style="font-size:11px;color:rgba(255,255,255,.4);cursor:pointer" onclick="closePremiumModal()">Continuar com plano gratuito</span>
-    </div>
-    <div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(168,184,200,.1);text-align:center">
-      <span style="font-size:10px;color:rgba(255,255,255,.3)">Tem um código? <strong style="color:#a8b8c8;cursor:pointer" onclick="activatePremiumCode()">Clique aqui</strong></span>
     </div>
   </div>
 </div>
