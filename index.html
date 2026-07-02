@@ -1093,14 +1093,9 @@ function hideSplash(){
   </div>
   <div id="inv-indexadores"></div>
   <!-- FERRAMENTAS DE ANÁLISE (Pro) -->
-  <div class="card" style="padding:14px">
-    <div class="card-title blue" style="margin-bottom:12px">🧮 Ferramentas de análise</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <button class="btn btn-ghost" onclick="abrirComparadorInv()" style="font-size:12px;padding:12px 8px">⚖️ Comparar<br>investimentos</button>
-      <button class="btn btn-ghost" onclick="abrirCupomInv()" style="font-size:12px;padding:12px 8px">🎟️ Crédito privado<br>c/ cupom</button>
-    </div>
-    <button class="btn btn-ghost" onclick="abrirCalcInv('lucro')" style="font-size:12px;padding:12px 8px;margin-top:8px;width:100%">💰 Lucro Real — simular minha carteira</button>
-    <button class="btn btn-ghost" onclick="gerarPDFConsolidado()" style="font-size:12px;padding:12px 8px;margin-top:8px;width:100%">📄 Relatório consolidado da carteira (PDF)</button>
+  <div class="card" style="padding:16px">
+    <button class="btn" onclick="abrirCalcInv('comparar')" style="width:100%;padding:15px;font-size:14px;font-weight:800;background:linear-gradient(135deg,#1a5faa,#0f3460);color:#fff;display:flex;align-items:center;justify-content:center;gap:8px">🧮 Calculadoras de investimento</button>
+    <p style="font-size:11px;color:var(--ink3);text-align:center;margin-top:8px">Comparativo · Equivalência · Lucro Real · Cupom</p>
   </div>
   <div class="inv-tabs">
     <div class="inv-tab active" id="itab-fixa" onclick="switchInvTab('fixa')">Renda Fixa</div>
@@ -7790,8 +7785,8 @@ init();
     <div style="font-weight:900;font-size:16px;color:var(--ink);margin-left:4px">🧮 Calculadora de Investimentos</div>
   </div>
   <div style="display:flex;gap:8px;padding:14px 18px 0;flex-shrink:0">
-    <div class="calc-tab active" id="ctab-comparar" onclick="switchCalcTab('comparar')">Comparar</div>
-    <div class="calc-tab" id="ctab-calcular" onclick="switchCalcTab('calcular')">Calcular 1</div>
+    <div class="calc-tab active" id="ctab-comparar" onclick="switchCalcTab('comparar')">Comparativo</div>
+    <div class="calc-tab" id="ctab-calcular" onclick="switchCalcTab('calcular')">Equivalência</div>
     <div class="calc-tab" id="ctab-lucro" onclick="switchCalcTab('lucro')">Lucro Real</div>
     <div class="calc-tab" id="ctab-cupom" onclick="switchCalcTab('cupom')">Cupom</div>
   </div>
