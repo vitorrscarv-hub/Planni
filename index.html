@@ -81,6 +81,10 @@ body.font-scale-2 #content .fin-pill-val,body.font-scale-2 #content .balance-val
 .card>*{position:relative;z-index:1}
 .card-title{font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--ink3);margin-bottom:14px}
 .card-title.blue{color:var(--sky)}
+.calc-tab{flex:1;text-align:center;padding:11px 8px;border-radius:13px 13px 0 0;font-size:12px;font-weight:800;letter-spacing:.03em;color:var(--ink3);cursor:pointer;background:rgba(255,255,255,.4);transition:all .2s}
+.calc-tab.active{color:var(--sky);background:rgba(255,255,255,.85);box-shadow:0 -2px 8px rgba(40,70,110,.06)}
+.calc-row{display:flex;gap:8px;margin-bottom:9px;align-items:center}
+.calc-card{background:var(--glass-bright);border:1px solid var(--glass-line);border-radius:var(--r2);padding:16px;box-shadow:var(--shadow);margin-bottom:14px}
 /* INPUTS */
 input,textarea,select{width:100%;background:var(--sky-xl);border:1.5px solid var(--border);border-radius:var(--r);padding:11px 14px;color:var(--ink);font-family:var(--font-sf);font-size:14px;font-weight:500;outline:none;transition:border-color .2s,box-shadow .2s;-webkit-appearance:none}
 input:focus,textarea:focus,select:focus{border-color:var(--sky);box-shadow:0 0 0 3px rgba(45,125,210,.12)}
@@ -7031,44 +7035,71 @@ function gerarPDFConsolidado(){
   toast('✓ Relatório consolidado gerado');
 }
 
-// Placeholders das ferramentas (abrem as calculadoras) - implementadas a seguir
-function abrirComparadorInv(){ _abrirModalFerramenta('comparador'); }
-function abrirCupomInv(){ _abrirModalFerramenta('cupom'); }
+// Abre a tela cheia da calculadora
+function abrirComparadorInv(){ abrirCalcInv('comparar'); }
+function abrirCupomInv(){ abrirCalcInv('cupom'); }
 
-function _fecharModalFerramenta(){ document.getElementById('inv-tool-modal').style.display='none'; }
-
-function _abrirModalFerramenta(tipo){
-  var modal=document.getElementById('inv-tool-modal');
-  var title=document.getElementById('inv-tool-title');
-  var body=document.getElementById('inv-tool-body');
+var _calcTabAtual='comparar';
+function abrirCalcInv(tab){
   _ensureJsPDF();
-  if(tipo==='comparador'){
-    title.textContent='⚖️ Comparar investimentos';
-    body.innerHTML =
-      '<p style="font-size:12px;color:#667;margin-bottom:12px">Compare renda fixa por equivalência fiscal (gross-up). Isentos (LCI/LCA/CRI/CRA) são convertidos em CDB equivalente.</p>'
-      + _linhaComp(1) + _linhaComp(2) + _linhaComp(3) + _linhaComp(4)
-      + '<label style="font-size:12px;font-weight:700">Prazo</label>'
-      + '<div style="display:flex;gap:8px;margin-bottom:12px"><input id="cmp-prazo" type="number" value="2" style="flex:1;padding:10px;border:1px solid #dce8f3;border-radius:10px"><select id="cmp-prazo-un" style="flex:1;padding:10px;border:1px solid #dce8f3;border-radius:10px"><option value="365">anos</option><option value="30">meses</option><option value="1">dias</option></select></div>'
-      + '<button class="btn" onclick="_calcularComparadorInv()" style="width:100%">Comparar</button>'
-      + '<div id="cmp-resultado" style="margin-top:14px"></div>';
-  } else if(tipo==='cupom'){
-    title.textContent='🎟️ Crédito privado com cupom';
-    body.innerHTML =
-      '<p style="font-size:12px;color:#667;margin-bottom:12px">Compara um título isento com cupom (debênture incentivada, CRI, CRA) contra um Tesouro/título tributado. Com IR por cupom e periodicidade.</p>'
-      + '<div style="background:#fff8e6;border:1px solid #e8c860;border-radius:10px;padding:10px;font-size:11px;color:#785e10;margin-bottom:12px">Esta ferramenta detalhada está disponível na versão web completa. Em breve aqui no app. Por ora, use o comparador de equivalência.</div>'
-      + '<button class="btn btn-ghost" onclick="_fecharModalFerramenta()" style="width:100%">Fechar</button>';
-  }
-  modal.style.display='flex';
+  document.getElementById('inv-calc-screen').style.display='flex';
+  switchCalcTab(tab||'comparar');
+}
+function fecharCalcInv(){ document.getElementById('inv-calc-screen').style.display='none'; }
+
+function switchCalcTab(tab){
+  _calcTabAtual=tab;
+  ['comparar','calcular','cupom'].forEach(function(t){
+    var el=document.getElementById('ctab-'+t);
+    if(el) el.classList.toggle('active', t===tab);
+  });
+  var body=document.getElementById('inv-calc-body');
+  if(tab==='comparar') body.innerHTML=_htmlComparar();
+  else if(tab==='calcular') body.innerHTML=_htmlCalcular();
+  else if(tab==='cupom') body.innerHTML=_htmlCupom();
 }
 
-function _linhaComp(n){
-  return '<div style="display:flex;gap:6px;margin-bottom:8px;align-items:center">'
-    + '<select id="cmp-tipo'+n+'" style="flex:1.2;padding:9px;border:1px solid #dce8f3;border-radius:10px;font-size:12px">'
-    + '<option value="">—</option>'
+function _selTipo(id){
+  return '<select id="'+id+'" style="flex:1.2">'
+    + '<option value="">Tipo —</option>'
     + '<option value="cdb">CDB</option><option value="lci">LCI</option><option value="lca">LCA</option>'
     + '<option value="cri">CRI</option><option value="cra">CRA</option><option value="lc">LC</option>'
-    + '<option value="debenture">Debênture</option></select>'
-    + '<input id="cmp-taxa'+n+'" type="number" placeholder="% CDI" style="flex:1;padding:9px;border:1px solid #dce8f3;border-radius:10px;font-size:12px">'
+    + '<option value="debenture">Debênture</option></select>';
+}
+
+function _htmlComparar(){
+  var linhas='';
+  for(var n=1;n<=4;n++){
+    linhas+='<div class="calc-row">'+_selTipo('cmp-tipo'+n)
+      +'<input id="cmp-taxa'+n+'" type="number" placeholder="% do CDI" style="flex:1"></div>';
+  }
+  return '<div class="calc-card">'
+    + '<div class="card-title blue">Comparar por equivalência (gross-up)</div>'
+    + '<p style="font-size:12px;color:var(--ink2);margin-bottom:14px;line-height:1.5">Informe até 4 investimentos. Isentos (LCI/LCA/CRI/CRA) são convertidos no CDB equivalente para comparação justa.</p>'
+    + linhas
+    + '<label>Prazo</label>'
+    + '<div class="calc-row"><input id="cmp-prazo" type="number" value="2" style="flex:1"><select id="cmp-prazo-un" style="flex:1"><option value="365">anos</option><option value="30">meses</option><option value="1">dias</option></select></div>'
+    + '<button class="btn" onclick="_calcularComparadorInv()" style="width:100%;margin-top:6px">Comparar</button>'
+    + '</div>'
+    + '<div id="cmp-resultado"></div>';
+}
+
+function _htmlCalcular(){
+  return '<div class="calc-card">'
+    + '<div class="card-title blue">Calcular equivalência de um investimento</div>'
+    + '<p style="font-size:12px;color:var(--ink2);margin-bottom:14px;line-height:1.5">Veja quanto um investimento isento equivale em CDB (ou vice-versa), descontando o IR do prazo.</p>'
+    + '<div class="calc-row">'+_selTipo('cal-tipo')+'<input id="cal-taxa" type="number" placeholder="% do CDI" style="flex:1"></div>'
+    + '<label>Prazo</label>'
+    + '<div class="calc-row"><input id="cal-prazo" type="number" value="2" style="flex:1"><select id="cal-prazo-un" style="flex:1"><option value="365">anos</option><option value="30">meses</option><option value="1">dias</option></select></div>'
+    + '<button class="btn" onclick="_calcularUnicoInv()" style="width:100%;margin-top:6px">Calcular</button>'
+    + '</div>'
+    + '<div id="cal-resultado"></div>';
+}
+
+function _htmlCupom(){
+  return '<div class="calc-card">'
+    + '<div class="card-title blue">Crédito privado com cupom</div>'
+    + '<div style="background:#fff8e6;border:1px solid #e8c860;border-radius:12px;padding:14px;font-size:12px;color:#785e10;line-height:1.5">🎟️ A análise de títulos com cupom (debênture incentivada, CRI, CRA vs Tesouro), com IR por pagamento e periodicidade mensal/semestral/anual, está sendo integrada a esta tela. Por enquanto, use o comparador de equivalência na aba "Comparar".</div>'
     + '</div>';
 }
 
@@ -7084,26 +7115,47 @@ function _calcularComparadorInv(){
     }
   }
   var out=document.getElementById('cmp-resultado');
-  if(itens.length<2){ out.innerHTML='<div style="color:#c33;font-size:12px">Informe pelo menos 2 investimentos (tipo + taxa).</div>'; return; }
+  if(itens.length<2){ out.innerHTML='<div style="color:var(--red);font-size:12px;padding:8px">Informe pelo menos 2 investimentos (tipo + taxa).</div>'; return; }
   var prazo=parseFloat(document.getElementById('cmp-prazo').value)||2;
   var un=parseFloat(document.getElementById('cmp-prazo-un').value)||365;
   var dias=Math.round(prazo*un);
   itens.forEach(function(it){ it.dias=dias; });
   var comp=compararPorGrossUp(itens);
-  if(comp.erro){ out.innerHTML='<div style="color:#c33">'+comp.erro+'</div>'; return; }
-  var html='<div style="background:#f5f8fc;border-radius:12px;padding:12px">';
+  if(comp.erro){ out.innerHTML='<div style="color:var(--red);padding:8px">'+comp.erro+'</div>'; return; }
+  var html='<div class="calc-card">';
   comp.itens.forEach(function(it,i){
     var medal=it.vencedor?'🏆':(i+1)+'º';
     var equiv=it.isento?' → CDB '+_invV(it.cdbEquivalente)+'%':'';
-    html+='<div style="padding:6px 0;font-size:13px;'+(it.vencedor?'font-weight:800;color:#0f3460':'')+'">'+medal+' '+it.nome+(it.isento?' (isento)':'')+equiv+'</div>';
+    html+='<div style="padding:8px 0;font-size:14px;border-bottom:1px solid var(--border);'+(it.vencedor?'font-weight:800;color:var(--sky2)':'color:var(--ink)')+'">'+medal+' '+it.nome+(it.isento?' (isento)':'')+equiv+'</div>';
   });
+  html+='<button class="btn" onclick="_gerarPDFchat()" style="width:100%;margin-top:14px;background:linear-gradient(160deg,#c9962f,#a87a1e)">📄 Baixar relatório em PDF</button>';
   html+='</div>';
-  html+='<button class="btn" onclick="_gerarPDFComparadorModal()" style="width:100%;margin-top:10px;background:linear-gradient(160deg,#c9962f,#a87a1e)">📄 Baixar PDF</button>';
   out.innerHTML=html;
   _ultimaComparacaoChat={ comp:comp, dias:dias, anos:(dias/365).toFixed(dias%365===0?0:1).replace('.',',') };
 }
 
-function _gerarPDFComparadorModal(){ _gerarPDFchat(); }
+function _calcularUnicoInv(){
+  var tipo=(document.getElementById('cal-tipo')||{}).value;
+  var taxa=parseFloat((document.getElementById('cal-taxa')||{}).value);
+  var out=document.getElementById('cal-resultado');
+  if(!tipo || isNaN(taxa)){ out.innerHTML='<div style="color:var(--red);font-size:12px;padding:8px">Informe o tipo e a taxa.</div>'; return; }
+  var isentos={lci:1,lca:1,cri:1,cra:1};
+  var nomes={cdb:'CDB',lci:'LCI',lca:'LCA',cri:'CRI',cra:'CRA',lc:'LC',debenture:'Debênture'};
+  var prazo=parseFloat(document.getElementById('cal-prazo').value)||2;
+  var un=parseFloat(document.getElementById('cal-prazo-un').value)||365;
+  var dias=Math.round(prazo*un);
+  var html='<div class="calc-card">';
+  if(isentos[tipo]){
+    var gu=grossUp(taxa,dias);
+    html+='<div style="font-size:14px;line-height:1.6;color:var(--ink)"><strong>'+nomes[tipo]+' '+_invV(taxa)+'% (isento)</strong><br>Equivale a um CDB de <strong style="color:var(--sky2)">'+_invV(gu.cdbEquivalente)+'% do CDI</strong> (IR de '+_invV((gu.aliquotaIR*100).toFixed(1))+'% no prazo).<br><span style="color:var(--ink2);font-size:13px">Um CDB só ganha se pagar mais que '+_invV(gu.cdbEquivalente)+'% do CDI.</span></div>';
+  } else {
+    var gd=grossDown(taxa,dias);
+    html+='<div style="font-size:14px;line-height:1.6;color:var(--ink)"><strong>'+nomes[tipo]+' '+_invV(taxa)+'% (tributado)</strong><br>Equivale a um isento (LCI/LCA) de <strong style="color:var(--sky2)">'+_invV(gd.lciEquivalente)+'% do CDI</strong> (IR de '+_invV((gd.aliquotaIR*100).toFixed(1))+'% no prazo).<br><span style="color:var(--ink2);font-size:13px">Uma LCI só ganha se pagar mais que '+_invV(gd.lciEquivalente)+'% do CDI.</span></div>';
+  }
+  html+='</div>';
+  out.innerHTML=html;
+}
+
 
 
 
@@ -7517,14 +7569,17 @@ function _aiExecuteAction(a){
 init();
 </script>
 <!-- PREMIUM MODAL -->
-<div id="inv-tool-modal" style="position:fixed;inset:0;z-index:410;background:rgba(7,15,35,.85);backdrop-filter:blur(10px);display:none;align-items:flex-end;justify-content:center;padding:0">
-  <div style="background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;padding:20px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-      <div id="inv-tool-title" style="font-weight:900;font-size:16px;color:#1a2b3c">Ferramenta</div>
-      <span onclick="_fecharModalFerramenta()" style="font-size:22px;cursor:pointer;color:#889">✕</span>
-    </div>
-    <div id="inv-tool-body"></div>
+<div id="inv-calc-screen" style="position:fixed;inset:0;z-index:410;background:radial-gradient(115% 75% at 82% -8%,#d4e6f5 0%,transparent 55%),linear-gradient(165deg,#eef4fa 0%,#e6eef7 52%,#f0f5fb 100%);display:none;flex-direction:column">
+  <div style="display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.6);backdrop-filter:blur(10px)">
+    <span onclick="fecharCalcInv()" style="font-size:20px;cursor:pointer;color:var(--sky2);font-weight:800;display:flex;align-items:center;gap:6px">‹ <span style="font-size:13px">Voltar</span></span>
+    <div style="font-weight:900;font-size:16px;color:var(--ink);margin-left:4px">🧮 Calculadora de Investimentos</div>
   </div>
+  <div style="display:flex;gap:8px;padding:14px 18px 0;flex-shrink:0">
+    <div class="calc-tab active" id="ctab-comparar" onclick="switchCalcTab('comparar')">Comparar</div>
+    <div class="calc-tab" id="ctab-calcular" onclick="switchCalcTab('calcular')">Calcular 1</div>
+    <div class="calc-tab" id="ctab-cupom" onclick="switchCalcTab('cupom')">Cupom</div>
+  </div>
+  <div id="inv-calc-body" style="flex:1;overflow-y:auto;padding:18px;max-width:640px;width:100%;margin:0 auto"></div>
 </div>
 
 <div id="premium-modal">
