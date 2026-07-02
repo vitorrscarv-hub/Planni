@@ -1088,6 +1088,15 @@ function hideSplash(){
     <div class="inv-sum-box"><div class="inv-sum-val" id="inv-cripto-total">R$ 0</div><div class="inv-sum-label">Cripto</div></div>
   </div>
   <div id="inv-indexadores"></div>
+  <!-- FERRAMENTAS DE ANÁLISE (Pro) -->
+  <div class="card" style="padding:14px">
+    <div class="card-title blue" style="margin-bottom:12px">🧮 Ferramentas de análise</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <button class="btn btn-ghost" onclick="abrirComparadorInv()" style="font-size:12px;padding:12px 8px">⚖️ Comparar<br>investimentos</button>
+      <button class="btn btn-ghost" onclick="abrirCupomInv()" style="font-size:12px;padding:12px 8px">🎟️ Crédito privado<br>c/ cupom</button>
+    </div>
+    <button class="btn btn-ghost" onclick="gerarPDFConsolidado()" style="font-size:12px;padding:12px 8px;margin-top:8px;width:100%">📄 Relatório consolidado da carteira (PDF)</button>
+  </div>
   <div class="inv-tabs">
     <div class="inv-tab active" id="itab-fixa" onclick="switchInvTab('fixa')">Renda Fixa</div>
     <div class="inv-tab" id="itab-variavel" onclick="switchInvTab('variavel')">Ações B3</div>
@@ -6945,6 +6954,159 @@ function _ensureJsPDF(){
   document.head.appendChild(s);
 }
 
+// Relatorio consolidado da carteira de renda fixa (usa os investimentos ja cadastrados)
+function gerarPDFConsolidado(){
+  if(!window.jspdf || !window.jspdf.jsPDF){ toast('Carregando gerador de PDF, tente de novo em 2s.'); _ensureJsPDF(); return; }
+  var fixas = (state.investments||[]).filter(function(i){ return i.kind==='fixa'; });
+  if(!fixas.length){ toast('Cadastre ao menos um investimento de renda fixa.'); return; }
+
+  var jsPDF = window.jspdf.jsPDF;
+  var doc = new jsPDF({ unit:'mm', format:'a4' });
+  var W=210, M=16, y=0;
+  var PETROL=[28,74,110], BLUE=[45,108,151], GOLD=[201,150,47], GREY=[90,107,124], INK=[26,43,60], SOFT=[220,232,243], GREEN=[22,140,90], RED=[190,60,60];
+  var hoje = new Date().toLocaleDateString('pt-BR');
+
+  doc.setFillColor(PETROL[0],PETROL[1],PETROL[2]); doc.rect(0,0,W,32,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFont('helvetica','bold'); doc.setFontSize(20); doc.text('Planni', M, 16);
+  doc.setFont('helvetica','normal'); doc.setFontSize(11);
+  doc.text('Relatório Consolidado da Carteira', M, 24);
+  doc.setFontSize(8); doc.text('Emitido em '+hoje, W-M, 16, {align:'right'});
+  y = 44;
+
+  // totais
+  var totInvest=0, totLiq=0, totRend=0;
+  fixas.forEach(function(inv){
+    var r = calcFixaReturn(inv);
+    totInvest += inv.value; totLiq += r.valorLiquido; totRend += r.rendLiquido;
+  });
+  var pos = totRend>=0;
+
+  doc.setFillColor(238,244,250); doc.roundedRect(M, y, W-2*M, 24, 2,2,'F');
+  doc.setTextColor(PETROL[0],PETROL[1],PETROL[2]); doc.setFont('helvetica','bold'); doc.setFontSize(10);
+  doc.text('Resumo da carteira (renda fixa)', M+4, y+7);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(INK[0],INK[1],INK[2]);
+  doc.text('Total aplicado: R$ '+fm(totInvest), M+4, y+14);
+  doc.text('Valor líquido hoje: R$ '+fm(totLiq), M+4, y+20);
+  doc.setTextColor(pos?GREEN[0]:RED[0], pos?GREEN[1]:RED[1], pos?GREEN[2]:RED[2]);
+  doc.setFont('helvetica','bold');
+  doc.text('Resultado líquido: '+(pos?'+':'−')+'R$ '+fm(Math.abs(totRend)), W-M-4, y+20, {align:'right'});
+  y += 30;
+
+  // tabela de investimentos
+  doc.setTextColor(PETROL[0],PETROL[1],PETROL[2]); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text('Investimentos', M, y); y+=6;
+  var colX=[M, M+62, M+92, M+126, M+160];
+  doc.setFillColor(BLUE[0],BLUE[1],BLUE[2]); doc.rect(M, y-4, W-2*M, 7,'F');
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(8);
+  ['Investimento','Tipo','Aplicado','Líquido','Rendim.'].forEach(function(c,i){ doc.text(c, colX[i], y); });
+  y+=5;
+  doc.setFontSize(8);
+  fixas.forEach(function(inv,idx){
+    var r = calcFixaReturn(inv);
+    var p = r.rendLiquido>=0;
+    if(idx%2===0){ doc.setFillColor(238,244,250); doc.rect(M, y-4, W-2*M, 7,'F'); }
+    doc.setFont('helvetica','normal'); doc.setTextColor(INK[0],INK[1],INK[2]);
+    doc.text(String(inv.name).substring(0,28), colX[0], y);
+    doc.text(String(inv.type).substring(0,10), colX[1], y);
+    doc.text('R$ '+fm(inv.value), colX[2], y);
+    doc.text('R$ '+fm(r.valorLiquido), colX[3], y);
+    doc.setTextColor(p?GREEN[0]:RED[0], p?GREEN[1]:RED[1], p?GREEN[2]:RED[2]);
+    doc.text((p?'+':'−')+fm(Math.abs(r.rendLiquido)), colX[4], y);
+    y+=7;
+    if(y>260){ doc.addPage(); y=20; }
+  });
+  y+=6;
+
+  if(y<250){
+    doc.setFillColor(245,248,252); doc.roundedRect(M, y, W-2*M, 20, 2,2,'F');
+    doc.setTextColor(GREY[0],GREY[1],GREY[2]); doc.setFont('helvetica','italic'); doc.setFontSize(7.5);
+    var disc='Este material tem caráter informativo e não constitui recomendação de investimento. Valores líquidos estimados com base nas alíquotas de IR/IOF vigentes e nas taxas informadas no cadastro. Rentabilidade passada não garante resultados futuros.';
+    doc.text(doc.splitTextToSize(disc, W-2*M-6), M+3, y+5);
+  }
+  doc.setTextColor(GREY[0],GREY[1],GREY[2]); doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
+  doc.text('Relatório gerado com Planni · planni.pages.dev', M, 287);
+  doc.text(hoje, W-M, 287, {align:'right'});
+  doc.save('Carteira_Planni_'+hoje.replace(/\//g,'-')+'.pdf');
+  toast('✓ Relatório consolidado gerado');
+}
+
+// Placeholders das ferramentas (abrem as calculadoras) - implementadas a seguir
+function abrirComparadorInv(){ _abrirModalFerramenta('comparador'); }
+function abrirCupomInv(){ _abrirModalFerramenta('cupom'); }
+
+function _fecharModalFerramenta(){ document.getElementById('inv-tool-modal').style.display='none'; }
+
+function _abrirModalFerramenta(tipo){
+  var modal=document.getElementById('inv-tool-modal');
+  var title=document.getElementById('inv-tool-title');
+  var body=document.getElementById('inv-tool-body');
+  _ensureJsPDF();
+  if(tipo==='comparador'){
+    title.textContent='⚖️ Comparar investimentos';
+    body.innerHTML =
+      '<p style="font-size:12px;color:#667;margin-bottom:12px">Compare renda fixa por equivalência fiscal (gross-up). Isentos (LCI/LCA/CRI/CRA) são convertidos em CDB equivalente.</p>'
+      + _linhaComp(1) + _linhaComp(2) + _linhaComp(3) + _linhaComp(4)
+      + '<label style="font-size:12px;font-weight:700">Prazo</label>'
+      + '<div style="display:flex;gap:8px;margin-bottom:12px"><input id="cmp-prazo" type="number" value="2" style="flex:1;padding:10px;border:1px solid #dce8f3;border-radius:10px"><select id="cmp-prazo-un" style="flex:1;padding:10px;border:1px solid #dce8f3;border-radius:10px"><option value="365">anos</option><option value="30">meses</option><option value="1">dias</option></select></div>'
+      + '<button class="btn" onclick="_calcularComparadorInv()" style="width:100%">Comparar</button>'
+      + '<div id="cmp-resultado" style="margin-top:14px"></div>';
+  } else if(tipo==='cupom'){
+    title.textContent='🎟️ Crédito privado com cupom';
+    body.innerHTML =
+      '<p style="font-size:12px;color:#667;margin-bottom:12px">Compara um título isento com cupom (debênture incentivada, CRI, CRA) contra um Tesouro/título tributado. Com IR por cupom e periodicidade.</p>'
+      + '<div style="background:#fff8e6;border:1px solid #e8c860;border-radius:10px;padding:10px;font-size:11px;color:#785e10;margin-bottom:12px">Esta ferramenta detalhada está disponível na versão web completa. Em breve aqui no app. Por ora, use o comparador de equivalência.</div>'
+      + '<button class="btn btn-ghost" onclick="_fecharModalFerramenta()" style="width:100%">Fechar</button>';
+  }
+  modal.style.display='flex';
+}
+
+function _linhaComp(n){
+  return '<div style="display:flex;gap:6px;margin-bottom:8px;align-items:center">'
+    + '<select id="cmp-tipo'+n+'" style="flex:1.2;padding:9px;border:1px solid #dce8f3;border-radius:10px;font-size:12px">'
+    + '<option value="">—</option>'
+    + '<option value="cdb">CDB</option><option value="lci">LCI</option><option value="lca">LCA</option>'
+    + '<option value="cri">CRI</option><option value="cra">CRA</option><option value="lc">LC</option>'
+    + '<option value="debenture">Debênture</option></select>'
+    + '<input id="cmp-taxa'+n+'" type="number" placeholder="% CDI" style="flex:1;padding:9px;border:1px solid #dce8f3;border-radius:10px;font-size:12px">'
+    + '</div>';
+}
+
+function _calcularComparadorInv(){
+  var itens=[];
+  var nomes={cdb:'CDB',lci:'LCI',lca:'LCA',cri:'CRI',cra:'CRA',lc:'LC',debenture:'Debênture'};
+  var isentos={lci:1,lca:1,cri:1,cra:1};
+  for(var n=1;n<=4;n++){
+    var tipo=(document.getElementById('cmp-tipo'+n)||{}).value;
+    var taxa=parseFloat((document.getElementById('cmp-taxa'+n)||{}).value);
+    if(tipo && !isNaN(taxa)){
+      itens.push({ tipo:tipo, nome:nomes[tipo]+' '+_invV(taxa)+'%', isento:!!isentos[tipo], taxaCDI:taxa });
+    }
+  }
+  var out=document.getElementById('cmp-resultado');
+  if(itens.length<2){ out.innerHTML='<div style="color:#c33;font-size:12px">Informe pelo menos 2 investimentos (tipo + taxa).</div>'; return; }
+  var prazo=parseFloat(document.getElementById('cmp-prazo').value)||2;
+  var un=parseFloat(document.getElementById('cmp-prazo-un').value)||365;
+  var dias=Math.round(prazo*un);
+  itens.forEach(function(it){ it.dias=dias; });
+  var comp=compararPorGrossUp(itens);
+  if(comp.erro){ out.innerHTML='<div style="color:#c33">'+comp.erro+'</div>'; return; }
+  var html='<div style="background:#f5f8fc;border-radius:12px;padding:12px">';
+  comp.itens.forEach(function(it,i){
+    var medal=it.vencedor?'🏆':(i+1)+'º';
+    var equiv=it.isento?' → CDB '+_invV(it.cdbEquivalente)+'%':'';
+    html+='<div style="padding:6px 0;font-size:13px;'+(it.vencedor?'font-weight:800;color:#0f3460':'')+'">'+medal+' '+it.nome+(it.isento?' (isento)':'')+equiv+'</div>';
+  });
+  html+='</div>';
+  html+='<button class="btn" onclick="_gerarPDFComparadorModal()" style="width:100%;margin-top:10px;background:linear-gradient(160deg,#c9962f,#a87a1e)">📄 Baixar PDF</button>';
+  out.innerHTML=html;
+  _ultimaComparacaoChat={ comp:comp, dias:dias, anos:(dias/365).toFixed(dias%365===0?0:1).replace('.',',') };
+}
+
+function _gerarPDFComparadorModal(){ _gerarPDFchat(); }
+
+
+
 // Criacao local de tarefa / nota / evento, SEM IA.
 // Retorna a string de confirmacao, ou null se nao reconheceu o comando.
 function _tryLocalCreate(msg){
@@ -7355,6 +7517,16 @@ function _aiExecuteAction(a){
 init();
 </script>
 <!-- PREMIUM MODAL -->
+<div id="inv-tool-modal" style="position:fixed;inset:0;z-index:410;background:rgba(7,15,35,.85);backdrop-filter:blur(10px);display:none;align-items:flex-end;justify-content:center;padding:0">
+  <div style="background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;padding:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div id="inv-tool-title" style="font-weight:900;font-size:16px;color:#1a2b3c">Ferramenta</div>
+      <span onclick="_fecharModalFerramenta()" style="font-size:22px;cursor:pointer;color:#889">✕</span>
+    </div>
+    <div id="inv-tool-body"></div>
+  </div>
+</div>
+
 <div id="premium-modal">
   <div class="premium-sheet">
     <div class="prem-sheet-badge">
