@@ -7168,17 +7168,31 @@ function _lucroCalcular(){
   var validos=_lucroAtivos.filter(function(a){ return a.taxa!=='' && a.valor!=='' && a.dataAplic; });
   if(!validos.length){ out.innerHTML='<div style="color:var(--red);font-size:12px;padding:8px">Preencha ao menos um ativo (taxa, valor e data de aplicação).</div>'; return; }
 
-  var totalAplic=0, totalLiq=0, linhas=[];
+  var totalAplic=0, totalLiq=0, totalBruto=0, totalIR=0, totalIOF=0, linhas=[];
+  var diasMax=0;
   validos.forEach(function(a){
-    // monta objeto compatível com calcFixaReturn
     var inv={ type:a.tipo, index:a.index, rate:parseFloat(a.taxa), value:parseFloat(a.valor), start:a.dataAplic, end:a.dataVenc||null };
     var r=calcFixaReturn(inv);
     totalAplic+=inv.value; totalLiq+=r.valorLiquido;
-    linhas.push({ nome:a.tipo+' '+_invV(parseFloat(a.taxa))+'% '+a.index, aplic:inv.value, liq:r.valorLiquido, rend:r.rendLiquido });
+    totalBruto+=r.rendimentoBruto; totalIR+=r.ir; totalIOF+=r.iof;
+    if(r.diasDecorridos>diasMax) diasMax=r.diasDecorridos;
+    linhas.push({ nome:a.tipo+' '+_invV(parseFloat(a.taxa))+'% '+a.index, aplic:inv.value, liq:r.valorLiquido,
+      rend:r.rendLiquido, bruto:r.rendimentoBruto, ir:r.ir, iof:r.iof, aliqIR:r.aliqIR, isento:r.isIsento, dias:r.diasDecorridos });
   });
   var lucro=totalLiq-totalAplic;
   var pos=lucro>=0;
-  _lucroUltimo={ linhas:linhas, totalAplic:totalAplic, totalLiq:totalLiq, lucro:lucro };
+
+  // Efeito da inflação (IPCA) sobre o período — rendimento real via Fisher
+  var anos=diasMax/365;
+  var ipcaPeriodo=Math.pow(1+IPCA_ATUAL, anos)-1;          // inflação acumulada estimada no período
+  var inflacaoValor=totalAplic*ipcaPeriodo;                 // quanto a inflação "comeu" em R$ do valor aplicado
+  var rentNominalPct=totalAplic>0 ? (lucro/totalAplic) : 0;
+  var rentRealPct=(1+rentNominalPct)/(1+ipcaPeriodo)-1;    // rendimento real (Fisher)
+  var lucroReal=totalAplic*rentRealPct;                     // lucro em poder de compra
+
+  _lucroUltimo={ linhas:linhas, totalAplic:totalAplic, totalLiq:totalLiq, lucro:lucro,
+    totalBruto:totalBruto, totalIR:totalIR, totalIOF:totalIOF,
+    ipcaPeriodo:ipcaPeriodo, inflacaoValor:inflacaoValor, rentNominalPct:rentNominalPct, rentRealPct:rentRealPct, lucroReal:lucroReal, anos:anos };
 
   var html='<div class="calc-card">'
     + '<div style="text-align:center;padding:8px 0 14px">'
@@ -7194,9 +7208,31 @@ function _lucroCalcular(){
       + '<span style="font-weight:700;color:var(--ink)">R$ '+fm(l.liq)+' <span style="color:'+(lp?'var(--green)':'var(--red)')+';font-size:11px">('+(lp?'+':'−')+fm(Math.abs(l.rend))+')</span></span>'
     + '</div>';
   });
-  html+='<button class="btn" onclick="_gerarPDFLucro()" style="width:100%;margin-top:14px;background:linear-gradient(160deg,#c9962f,#a87a1e)">📄 Baixar PDF da carteira</button>';
   html+='</div>';
+
+  // BLOCO DE TRANSPARÊNCIA DO CÁLCULO
+  html+='<div class="calc-card">'
+    + '<div class="card-title blue">🔎 Entenda seu resultado</div>'
+    + _lucroLinhaDet('Rendimento bruto (antes de impostos)', '+R$ '+fm(totalBruto), 'var(--ink)')
+    + _lucroLinhaDet('Imposto de Renda descontado', '−R$ '+fm(totalIR), 'var(--red)')
+    + (totalIOF>0.005 ? _lucroLinhaDet('IOF descontado (resgate < 30 dias)', '−R$ '+fm(totalIOF), 'var(--red)') : '')
+    + _lucroLinhaDet('Rendimento líquido (o que sobrou)', (pos?'+':'−')+'R$ '+fm(Math.abs(lucro)), pos?'var(--green)':'var(--red)', true)
+    + '<div style="height:10px"></div>'
+    + _lucroLinhaDet('Inflação estimada no período (~'+anos.toFixed(1).replace('.',',')+' anos)', ipcaPeriodo>0?'−'+_invV((ipcaPeriodo*100).toFixed(2))+'%':'—', 'var(--orange)')
+    + _lucroLinhaDet('Poder de compra perdido p/ inflação', '−R$ '+fm(inflacaoValor), 'var(--orange)')
+    + _lucroLinhaDet('Rendimento REAL (descontada a inflação)', (rentRealPct>=0?'+':'−')+_invV((Math.abs(rentRealPct)*100).toFixed(2))+'%', rentRealPct>=0?'var(--green)':'var(--red)', true)
+    + '<p style="font-size:10px;color:var(--ink3);margin-top:10px;line-height:1.4">O rendimento real mostra o ganho acima da inflação — o que de fato aumentou seu poder de compra. Inflação estimada pelo IPCA de referência ('+_invV((IPCA_ATUAL*100).toFixed(2))+'% a.a.).</p>'
+    + '</div>';
+
+  html+='<button class="btn" onclick="_gerarPDFLucro()" style="width:100%;background:linear-gradient(160deg,#c9962f,#a87a1e)">📄 Baixar PDF da carteira</button>';
   out.innerHTML=html;
+}
+
+function _lucroLinhaDet(label,val,cor,forte){
+  return '<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;'+(forte?'border-top:1px solid var(--border);font-weight:800;padding-top:8px':'')+'">'
+    + '<span style="color:var(--ink2)">'+label+'</span>'
+    + '<span style="color:'+cor+';font-weight:'+(forte?'800':'600')+'">'+val+'</span>'
+    + '</div>';
 }
 
 var _lucroUltimo=null;
@@ -7245,7 +7281,29 @@ function _gerarPDFLucro(){
     y+=7;
     if(y>262){ doc.addPage(); y=20; }
   });
+  y+=8;
+
+  // Bloco de transparência: IR, IOF e inflação
+  if(y>230){ doc.addPage(); y=20; }
+  doc.setTextColor(PETROL[0],PETROL[1],PETROL[2]); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text('Entenda seu resultado',M,y); y+=7;
+  function detPDF(label,val,cor,forte){
+    doc.setFont('helvetica', forte?'bold':'normal'); doc.setFontSize(forte?9.5:9);
+    doc.setTextColor(GREY[0],GREY[1],GREY[2]); doc.text(label,M+2,y);
+    doc.setTextColor(cor[0],cor[1],cor[2]); doc.text(val,W-M-2,y,{align:'right'});
+    y+=6;
+  }
+  var posL=U.lucro>=0;
+  detPDF('Rendimento bruto (antes de impostos)','+R$ '+fm(U.totalBruto),INK);
+  detPDF('Imposto de Renda descontado','-R$ '+fm(U.totalIR),RED);
+  if(U.totalIOF>0.005) detPDF('IOF descontado','-R$ '+fm(U.totalIOF),RED);
+  detPDF('Rendimento líquido',(posL?'+':'-')+'R$ '+fm(Math.abs(U.lucro)), posL?GREEN:RED, true);
+  y+=3;
+  detPDF('Inflação estimada no período (~'+U.anos.toFixed(1).replace('.',',')+' anos)', U.ipcaPeriodo>0?'-'+_invV((U.ipcaPeriodo*100).toFixed(2))+'%':'-', [207,132,23]);
+  detPDF('Poder de compra perdido p/ inflação','-R$ '+fm(U.inflacaoValor),[207,132,23]);
+  detPDF('Rendimento REAL (descontada inflação)',(U.rentRealPct>=0?'+':'-')+_invV((Math.abs(U.rentRealPct)*100).toFixed(2))+'%', U.rentRealPct>=0?GREEN:RED, true);
   y+=6;
+
   if(y<250){
     doc.setFillColor(245,248,252); doc.roundedRect(M,y,W-2*M,22,2,2,'F');
     doc.setTextColor(GREY[0],GREY[1],GREY[2]); doc.setFont('helvetica','italic'); doc.setFontSize(7.5);
