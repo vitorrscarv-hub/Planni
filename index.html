@@ -1099,6 +1099,7 @@ function hideSplash(){
       <button class="btn btn-ghost" onclick="abrirComparadorInv()" style="font-size:12px;padding:12px 8px">⚖️ Comparar<br>investimentos</button>
       <button class="btn btn-ghost" onclick="abrirCupomInv()" style="font-size:12px;padding:12px 8px">🎟️ Crédito privado<br>c/ cupom</button>
     </div>
+    <button class="btn btn-ghost" onclick="abrirCalcInv('lucro')" style="font-size:12px;padding:12px 8px;margin-top:8px;width:100%">💰 Lucro Real — simular minha carteira</button>
     <button class="btn btn-ghost" onclick="gerarPDFConsolidado()" style="font-size:12px;padding:12px 8px;margin-top:8px;width:100%">📄 Relatório consolidado da carteira (PDF)</button>
   </div>
   <div class="inv-tabs">
@@ -7049,13 +7050,14 @@ function fecharCalcInv(){ document.getElementById('inv-calc-screen').style.displ
 
 function switchCalcTab(tab){
   _calcTabAtual=tab;
-  ['comparar','calcular','cupom'].forEach(function(t){
+  ['comparar','calcular','lucro','cupom'].forEach(function(t){
     var el=document.getElementById('ctab-'+t);
     if(el) el.classList.toggle('active', t===tab);
   });
   var body=document.getElementById('inv-calc-body');
   if(tab==='comparar') body.innerHTML=_htmlComparar();
   else if(tab==='calcular') body.innerHTML=_htmlCalcular();
+  else if(tab==='lucro'){ body.innerHTML=_htmlLucro(); if(!_lucroAtivos.length) _lucroAddAtivo(); _lucroRender(); }
   else if(tab==='cupom') body.innerHTML=_htmlCupom();
 }
 
@@ -7102,6 +7104,161 @@ function _htmlCupom(){
     + '<div style="background:#fff8e6;border:1px solid #e8c860;border-radius:12px;padding:14px;font-size:12px;color:#785e10;line-height:1.5">🎟️ A análise de títulos com cupom (debênture incentivada, CRI, CRA vs Tesouro), com IR por pagamento e periodicidade mensal/semestral/anual, está sendo integrada a esta tela. Por enquanto, use o comparador de equivalência na aba "Comparar".</div>'
     + '</div>';
 }
+
+// ===== LUCRO REAL: simulação da carteira do usuário =====
+var _lucroAtivos = []; // cada: {tipo, index, taxa, valor, dataAplic, dataVenc}
+var _lucroSeq = 0;
+
+function _htmlLucro(){
+  return '<div class="calc-card">'
+    + '<div class="card-title blue">💰 Lucro real da sua carteira</div>'
+    + '<p style="font-size:12px;color:var(--ink2);margin-bottom:4px;line-height:1.5">Adicione seus investimentos de renda fixa. O app calcula quanto cada um vale hoje (líquido, descontando IR/IOF) usando o CDI atual do Banco Central.</p>'
+    + '<p style="font-size:11px;color:var(--ink3);margin-bottom:14px">Valores são estimativas com base nas taxas informadas — podem diferir do valor exato da corretora.</p>'
+    + '<div id="lucro-lista"></div>'
+    + '<button class="btn btn-ghost" onclick="_lucroAddAtivo();_lucroRender()" style="width:100%;margin-top:4px;border-style:dashed">➕ Adicionar investimento</button>'
+    + '<button class="btn" onclick="_lucroCalcular()" style="width:100%;margin-top:10px">Calcular minha carteira</button>'
+    + '</div>'
+    + '<div id="lucro-resultado"></div>';
+}
+
+function _lucroAddAtivo(){
+  _lucroSeq++;
+  _lucroAtivos.push({ id:_lucroSeq, tipo:'CDB', index:'CDI', taxa:'', valor:'', dataAplic:'', dataVenc:'' });
+}
+function _lucroRemover(id){
+  _lucroAtivos = _lucroAtivos.filter(function(a){ return a.id!==id; });
+  _lucroRender();
+}
+function _lucroSync(id,campo,val){
+  var a=_lucroAtivos.find(function(x){ return x.id===id; });
+  if(a) a[campo]=val;
+}
+
+function _lucroRender(){
+  var box=document.getElementById('lucro-lista');
+  if(!box) return;
+  var tipos=['CDB','LCI','LCA','CRI','CRA','Tesouro','Debênture','LC'];
+  var indexadores=['CDI','IPCA+','Selic','Prefixado'];
+  var html='';
+  _lucroAtivos.forEach(function(a,i){
+    html+='<div style="background:var(--sky-xl);border-radius:14px;padding:12px;margin-bottom:10px;position:relative">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+        + '<span style="font-size:11px;font-weight:800;color:var(--sky)">Ativo '+(i+1)+'</span>'
+        + (_lucroAtivos.length>1?'<span onclick="_lucroRemover('+a.id+')" style="color:var(--red);cursor:pointer;font-size:16px;font-weight:700">✕</span>':'')
+      + '</div>'
+      + '<div class="calc-row">'
+        + '<select onchange="_lucroSync('+a.id+',\'tipo\',this.value)" style="flex:1">'+tipos.map(function(t){return '<option'+(t===a.tipo?' selected':'')+'>'+t+'</option>';}).join('')+'</select>'
+        + '<select onchange="_lucroSync('+a.id+',\'index\',this.value)" style="flex:1">'+indexadores.map(function(x){return '<option'+(x===a.index?' selected':'')+'>'+x+'</option>';}).join('')+'</select>'
+      + '</div>'
+      + '<div class="calc-row">'
+        + '<input type="number" placeholder="Taxa (ex: 110)" value="'+a.taxa+'" oninput="_lucroSync('+a.id+',\'taxa\',this.value)" style="flex:1">'
+        + '<input type="number" placeholder="Valor aplicado R$" value="'+a.valor+'" oninput="_lucroSync('+a.id+',\'valor\',this.value)" style="flex:1.2">'
+      + '</div>'
+      + '<div class="calc-row">'
+        + '<div style="flex:1"><label style="font-size:10px">Aplicação</label><input type="date" value="'+a.dataAplic+'" oninput="_lucroSync('+a.id+',\'dataAplic\',this.value)"></div>'
+        + '<div style="flex:1"><label style="font-size:10px">Vencimento (opc.)</label><input type="date" value="'+a.dataVenc+'" oninput="_lucroSync('+a.id+',\'dataVenc\',this.value)"></div>'
+      + '</div>'
+      + '</div>';
+  });
+  box.innerHTML=html;
+}
+
+function _lucroCalcular(){
+  var out=document.getElementById('lucro-resultado');
+  var validos=_lucroAtivos.filter(function(a){ return a.taxa!=='' && a.valor!=='' && a.dataAplic; });
+  if(!validos.length){ out.innerHTML='<div style="color:var(--red);font-size:12px;padding:8px">Preencha ao menos um ativo (taxa, valor e data de aplicação).</div>'; return; }
+
+  var totalAplic=0, totalLiq=0, linhas=[];
+  validos.forEach(function(a){
+    // monta objeto compatível com calcFixaReturn
+    var inv={ type:a.tipo, index:a.index, rate:parseFloat(a.taxa), value:parseFloat(a.valor), start:a.dataAplic, end:a.dataVenc||null };
+    var r=calcFixaReturn(inv);
+    totalAplic+=inv.value; totalLiq+=r.valorLiquido;
+    linhas.push({ nome:a.tipo+' '+_invV(parseFloat(a.taxa))+'% '+a.index, aplic:inv.value, liq:r.valorLiquido, rend:r.rendLiquido });
+  });
+  var lucro=totalLiq-totalAplic;
+  var pos=lucro>=0;
+  _lucroUltimo={ linhas:linhas, totalAplic:totalAplic, totalLiq:totalLiq, lucro:lucro };
+
+  var html='<div class="calc-card">'
+    + '<div style="text-align:center;padding:8px 0 14px">'
+      + '<div style="font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:.1em">Valor líquido da carteira hoje</div>'
+      + '<div style="font-size:32px;font-weight:900;color:var(--ink)">R$ '+fm(totalLiq)+'</div>'
+      + '<div style="font-size:14px;font-weight:700;color:'+(pos?'var(--green)':'var(--red)')+'">'+(pos?'+':'−')+'R$ '+fm(Math.abs(lucro))+' de lucro líquido</div>'
+      + '<div style="font-size:11px;color:var(--ink3);margin-top:2px">Aplicado: R$ '+fm(totalAplic)+'</div>'
+    + '</div>';
+  linhas.forEach(function(l){
+    var lp=l.rend>=0;
+    html+='<div style="display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid var(--border);font-size:13px">'
+      + '<span style="color:var(--ink)">'+l.nome+'</span>'
+      + '<span style="font-weight:700;color:var(--ink)">R$ '+fm(l.liq)+' <span style="color:'+(lp?'var(--green)':'var(--red)')+';font-size:11px">('+(lp?'+':'−')+fm(Math.abs(l.rend))+')</span></span>'
+    + '</div>';
+  });
+  html+='<button class="btn" onclick="_gerarPDFLucro()" style="width:100%;margin-top:14px;background:linear-gradient(160deg,#c9962f,#a87a1e)">📄 Baixar PDF da carteira</button>';
+  html+='</div>';
+  out.innerHTML=html;
+}
+
+var _lucroUltimo=null;
+function _gerarPDFLucro(){
+  if(!_lucroUltimo){ toast('Calcule a carteira primeiro.'); return; }
+  if(!window.jspdf || !window.jspdf.jsPDF){ toast('Carregando gerador de PDF...'); _ensureJsPDF(); return; }
+  var U=_lucroUltimo;
+  var jsPDF=window.jspdf.jsPDF;
+  var doc=new jsPDF({unit:'mm',format:'a4'});
+  var W=210,M=16,y=0;
+  var PETROL=[28,74,110],BLUE=[45,108,151],GREY=[90,107,124],INK=[26,43,60],SOFT=[220,232,243],GREEN=[22,140,90],RED=[190,60,60];
+  var hoje=new Date().toLocaleDateString('pt-BR');
+  doc.setFillColor(PETROL[0],PETROL[1],PETROL[2]); doc.rect(0,0,W,32,'F');
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(20); doc.text('Planni',M,16);
+  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.text('Simulação da Carteira — Lucro Real',M,24);
+  doc.setFontSize(8); doc.text('Emitido em '+hoje,W-M,16,{align:'right'});
+  y=44;
+  var pos=U.lucro>=0;
+  doc.setFillColor(238,244,250); doc.roundedRect(M,y,W-2*M,26,2,2,'F');
+  doc.setTextColor(GREY[0],GREY[1],GREY[2]); doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  doc.text('Valor líquido da carteira hoje',M+4,y+8);
+  doc.setTextColor(INK[0],INK[1],INK[2]); doc.setFont('helvetica','bold'); doc.setFontSize(18);
+  doc.text('R$ '+fm(U.totalLiq),M+4,y+18);
+  doc.setFontSize(9); doc.setTextColor(pos?GREEN[0]:RED[0],pos?GREEN[1]:RED[1],pos?GREEN[2]:RED[2]);
+  doc.text((pos?'+':'−')+'R$ '+fm(Math.abs(U.lucro))+' lucro líquido',W-M-4,y+12,{align:'right'});
+  doc.setTextColor(GREY[0],GREY[1],GREY[2]); doc.setFont('helvetica','normal'); doc.setFontSize(8);
+  doc.text('Aplicado: R$ '+fm(U.totalAplic),W-M-4,y+19,{align:'right'});
+  y+=34;
+  doc.setTextColor(PETROL[0],PETROL[1],PETROL[2]); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text('Ativos',M,y); y+=6;
+  var colX=[M,M+80,M+120,M+160];
+  doc.setFillColor(BLUE[0],BLUE[1],BLUE[2]); doc.rect(M,y-4,W-2*M,7,'F');
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(8);
+  ['Ativo','Aplicado','Líquido hoje','Rendim.'].forEach(function(c,i){ doc.text(c,colX[i],y); });
+  y+=5;
+  doc.setFontSize(8);
+  U.linhas.forEach(function(l,idx){
+    var lp=l.rend>=0;
+    if(idx%2===0){ doc.setFillColor(238,244,250); doc.rect(M,y-4,W-2*M,7,'F'); }
+    doc.setFont('helvetica','normal'); doc.setTextColor(INK[0],INK[1],INK[2]);
+    doc.text(String(l.nome).substring(0,34),colX[0],y);
+    doc.text('R$ '+fm(l.aplic),colX[1],y);
+    doc.text('R$ '+fm(l.liq),colX[2],y);
+    doc.setTextColor(lp?GREEN[0]:RED[0],lp?GREEN[1]:RED[1],lp?GREEN[2]:RED[2]);
+    doc.text((lp?'+':'−')+fm(Math.abs(l.rend)),colX[3],y);
+    y+=7;
+    if(y>262){ doc.addPage(); y=20; }
+  });
+  y+=6;
+  if(y<250){
+    doc.setFillColor(245,248,252); doc.roundedRect(M,y,W-2*M,22,2,2,'F');
+    doc.setTextColor(GREY[0],GREY[1],GREY[2]); doc.setFont('helvetica','italic'); doc.setFontSize(7.5);
+    var disc='Simulação estimada com base nas taxas e datas informadas e no CDI/Selic atuais do Banco Central. Os valores podem diferir do saldo exato da corretora (que considera marcação a mercado e datas precisas). Material informativo, não constitui recomendação de investimento.';
+    doc.text(doc.splitTextToSize(disc,W-2*M-6),M+3,y+5);
+  }
+  doc.setTextColor(GREY[0],GREY[1],GREY[2]); doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
+  doc.text('Relatório gerado com Planni · planni.pages.dev',M,287);
+  doc.text(hoje,W-M,287,{align:'right'});
+  doc.save('Carteira_LucroReal_Planni_'+hoje.replace(/\//g,'-')+'.pdf');
+  toast('✓ PDF da carteira gerado');
+}
+
 
 function _calcularComparadorInv(){
   var itens=[];
@@ -7577,6 +7734,7 @@ init();
   <div style="display:flex;gap:8px;padding:14px 18px 0;flex-shrink:0">
     <div class="calc-tab active" id="ctab-comparar" onclick="switchCalcTab('comparar')">Comparar</div>
     <div class="calc-tab" id="ctab-calcular" onclick="switchCalcTab('calcular')">Calcular 1</div>
+    <div class="calc-tab" id="ctab-lucro" onclick="switchCalcTab('lucro')">Lucro Real</div>
     <div class="calc-tab" id="ctab-cupom" onclick="switchCalcTab('cupom')">Cupom</div>
   </div>
   <div id="inv-calc-body" style="flex:1;overflow-y:auto;padding:18px;max-width:640px;width:100%;margin:0 auto"></div>
