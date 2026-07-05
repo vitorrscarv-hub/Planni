@@ -31,7 +31,11 @@ export async function onRequestPost(context) {
 
   try {
     // 1. Valida a chave secreta do Hotmart (Hottok)
-    const hottok = request.headers.get('hottok') || '';
+    // O Hotmart envia esse token no cabeçalho "X-HOTMART-HOTTOK" (doc oficial).
+    // Mantemos "hottok" como fallback só por segurança, mas o nome certo é o de cima.
+    const hottok = request.headers.get('X-HOTMART-HOTTOK')
+                || request.headers.get('hottok')
+                || '';
     if (!env.HOTMART_SECRET || hottok !== env.HOTMART_SECRET) {
       console.warn('Webhook rejeitado: hottok inválido');
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: CORS });
