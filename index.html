@@ -11,22 +11,22 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#2d7dd2">
 <meta name="application-name" content="Planni">
-<meta name="description" content="Seu sistema operacional financeiro pessoal">
+<meta name="description" content="Planni: seu aplicativo de finanças, você fala, ele registra.">
 <!-- Open Graph: aparência do link ao compartilhar (WhatsApp, redes sociais) -->
 <meta property="og:type" content="website">
-<meta property="og:title" content="Planni — Sua agenda e finanças inteligentes">
-<meta property="og:description" content="Organize finanças, agenda, tarefas e investimentos com um assistente inteligente. Privado e em português.">
+<meta property="og:title" content="Planni: seu aplicativo de finanças, você fala, ele registra">
+<meta property="og:description" content="Organize gastos, receitas e metas com IA, sem conectar seu banco. Privado e em português.">
 <meta property="og:image" content="https://planni.pages.dev/apple-touch-icon.png">
 <meta property="og:url" content="https://planni.pages.dev">
 <meta property="og:site_name" content="Planni">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Planni — Sua agenda e finanças inteligentes">
-<meta name="twitter:description" content="Organize finanças, agenda, tarefas e investimentos com um assistente inteligente.">
+<meta name="twitter:title" content="Planni: seu aplicativo de finanças, você fala, ele registra">
+<meta name="twitter:description" content="Organize gastos, receitas e metas com IA, sem conectar seu banco.">
 <meta name="twitter:image" content="https://planni.pages.dev/apple-touch-icon.png">
 <!-- PWA Manifest -->
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<title>Planni — Sua agenda inteligente</title>
+<title>Planni: seu aplicativo de finanças, você fala, ele registra</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -1626,7 +1626,7 @@ function hideSplash(){
 <div id="login-screen">
   <div style="width:80px;height:80px;border-radius:22px;background:linear-gradient(135deg,#8ab4f8,#6c63ff 55%,#a78bf0);display:flex;align-items:center;justify-content:center;box-shadow:0 12px 30px rgba(40,70,110,.28),inset 0 1px 0 rgba(255,255,255,.4);margin-bottom:14px"><img src="/apple-touch-icon.png" width="58" height="58" style="object-fit:contain"></div>
   <div class="login-logo">Planni</div>
-  <div class="login-sub">Sua agenda inteligente</div>
+  <div class="login-sub">Você fala. Ele registra.</div>
   <div class="login-card">
     <div class="login-title" id="login-mode-title">Entrar na sua conta</div>
     <div id="register-fields" style="display:none">
@@ -6105,7 +6105,7 @@ function generatePDFReport(){
     +'<\/div>'
     +'<h2>Por Categoria<\/h2><table><thead><tr><th>Categoria<\/th><th style="text-align:right">Valor<\/th><th style="text-align:right">%<\/th><\/tr><\/thead><tbody>'+(catRows||'<tr><td colspan="3">Sem despesas<\/td><\/tr>')+'<\/tbody><\/table>'
     +'<h2>Extrato<\/h2><table><thead><tr><th>Data<\/th><th>Descrição<\/th><th>Categoria<\/th><th style="text-align:right">Valor<\/th><\/tr><\/thead><tbody>'+(txRows||'<tr><td colspan="4">Sem movimentações<\/td><\/tr>')+'<\/tbody><\/table>'
-    +'<div class="footer">Planni — Sua agenda inteligente<\/div>'
+    +'<div class="footer">Planni — Você fala. Ele registra.<\/div>'
     +'<\/body><\/html>';
   const win=window.open('','_blank');
   if(win){ win.document.write(reportHTML); win.document.close(); setTimeout(()=>win.print(),500); }
@@ -8010,7 +8010,7 @@ init();
       <div class="premium-feat-item"><div class="premium-feat-check">✓</div><div class="premium-feat-text">🔄 Sincronização multi-dispositivo</div></div>
       <div class="premium-feat-item"><div class="premium-feat-check">✓</div><div class="premium-feat-text">🚫 Sem limites de lançamentos</div></div>
     </div>
-    <button class="btn-premium" onclick="window.open('https://pay.hotmart.com/H106430069Y','_blank')">✦ Assinar agora — R$19,90/mês</button>
+    <button class="btn-premium" onclick="window.open('https://pay.hotmart.com/R106587146E','_blank')">✦ Assinar agora — R$19,90/mês</button>
     <div style="margin-top:10px;text-align:center">
       <span style="font-size:11px;color:rgba(255,255,255,.4);cursor:pointer" onclick="closePremiumModal()">Continuar com plano gratuito</span>
     </div>
