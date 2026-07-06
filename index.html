@@ -6150,9 +6150,15 @@ var _extratoPendingTx = null; // transações aguardando confirmação do usuár
 
 function openExtratoPicker(){
   if(!isPremium){ openPremiumModal(); return; }
+  // Orientação (mostra uma vez por sessão): OFX/CSV é melhor que PDF
+  if(!_extratoDicaMostrada){
+    _extratoDicaMostrada = true;
+    _aiAddBubble('💡 Dica: para importar seu extrato, prefira baixar em <b>OFX</b> ou <b>CSV</b> no app do seu banco (procure por "exportar extrato" ou "extrato para software financeiro"). É instantâneo, funciona offline e mais preciso.<br><br>PDF e foto também funcionam, mas dependem de conexão e podem demorar.','ai-bot');
+  }
   var input = document.getElementById('extrato-file-input');
   if(input) input.click();
 }
+var _extratoDicaMostrada = false;
 
 // Carrega o PDF.js sob demanda (uma vez, fica em cache). Resolve quando pronto.
 var _pdfjsLoading = null;
@@ -7829,6 +7835,77 @@ function _chipPergunta(texto){
   aiChatSend();
 }
 
+// Mostra uma resposta do assistente com chips de sub-pergunta clicáveis
+function _localReplyComChips(texto, chips){
+  var typing=_aiAddBubble('digitando...','ai-typing');
+  setTimeout(function(){
+    if(typing) typing.remove();
+    var bubble=_aiAddBubble(texto,'ai-bot');
+    if(bubble){
+      var wrap=document.createElement('div');
+      wrap.style.cssText='display:flex;flex-wrap:wrap;gap:6px;margin-top:10px';
+      chips.forEach(function(c){
+        var b=document.createElement('button');
+        b.textContent=c.label;
+        b.style.cssText='border:1px solid var(--sky);background:var(--sky-xl);color:var(--sky);font-size:12px;font-weight:700;padding:7px 12px;border-radius:100px;cursor:pointer';
+        b.onclick=function(){ if(c.acao){ c.acao(); } else { _chipPergunta(c.pergunta); } };
+        wrap.appendChild(b);
+      });
+      bubble.appendChild(wrap);
+    }
+  }, 500);
+}
+
+// Detecta pedidos vagos e oferece sub-perguntas. Retorna true se tratou.
+function _tryDesambiguar(msg){
+  var c=msg.toLowerCase().trim();
+  // já tem período ou termo específico? então não é vago
+  var temPeriodo=/m[êe]s|ano|semana|hoje|ontem|dias|janeiro|fevereiro|mar[çc]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro/.test(c);
+
+  // "meus gastos" / "gastos" / "quanto gastei" (sem período nem categoria)
+  if(/^(meus\s+)?gastos?$/.test(c) || (/gast(ei|os|o)\b/.test(c) && c.split(/\s+/).length<=2 && !temPeriodo)){
+    _localReplyComChips('De qual período você quer ver seus gastos?', [
+      {label:'📅 Esse mês', pergunta:'quanto gastei esse mês'},
+      {label:'📅 Mês passado', pergunta:'quanto gastei mês passado'},
+      {label:'📅 Esse ano', pergunta:'quanto gastei esse ano'},
+      {label:'🔝 Maiores despesas', pergunta:'quais minhas maiores despesas esse mês'}
+    ]);
+    return true;
+  }
+
+  // "investimento" / "investir" / "aplicar" (vago)
+  if(/^(investimentos?|investir|aplicar|renda fixa)$/.test(c)){
+    _localReplyComChips('O que você quer fazer com investimentos?', [
+      {label:'⚖️ Comparar CDB e LCI', pergunta:'compara CDB 110% com LCI 95% por 2 anos'},
+      {label:'💰 Simular carteira', acao:function(){ abrirCalcInv('lucro'); }},
+      {label:'📊 Equivalência', pergunta:'quanto rende uma LCI de 95%'}
+    ]);
+    return true;
+  }
+
+  // "resumo" / "como estou" (vago)
+  if(/^(resumo|como\s+estou|situa[çc][ãa]o|balan[çc]o)$/.test(c)){
+    _localReplyComChips('Quer ver o resumo de qual período?', [
+      {label:'📊 Esse mês', pergunta:'como está minha vida financeira esse mês'},
+      {label:'📊 Mês passado', pergunta:'resumo mês passado'},
+      {label:'📊 Esse ano', pergunta:'resumo esse ano'}
+    ]);
+    return true;
+  }
+
+  // "criar" / "adicionar" (sem dizer o quê)
+  if(/^(criar|adicionar|nova|novo|adiciona|cria)$/.test(c)){
+    _localReplyComChips('O que você quer criar?', [
+      {label:'✓ Uma tarefa', pergunta:'cria uma tarefa'},
+      {label:'📝 Uma nota', pergunta:'cria uma nota'},
+      {label:'📅 Um evento', pergunta:'cria um evento'}
+    ]);
+    return true;
+  }
+
+  return false;
+}
+
 async function aiChatSend(){
   // Se estiver gravando, para antes de enviar
   if(_chatRecording) _stopChatVoice();
@@ -7876,6 +7953,13 @@ async function aiChatSend(){
     _aiChatHistory.push({role:'user',text:msg});
     _aiChatHistory.push({role:'model',text:invTexto});
     return;
+  }
+
+  // DESAMBIGUAÇÃO: pedido vago → oferece sub-perguntas em chips (sem gastar IA)
+  var vago = _tryDesambiguar(msg);
+  if(vago){
+    _aiChatHistory.push({role:'user',text:msg});
+    return; // a resposta com chips já foi mostrada
   }
 
   var typing=_aiAddBubble('digitando...','ai-typing');
