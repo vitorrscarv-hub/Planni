@@ -2078,6 +2078,8 @@ function startRealtimeSync(){
         viewMonth:   state.viewMonth
       });
       try{ localStorage.setItem(_userStorageKey(),JSON.stringify(state)); }catch(e){}
+      // Isolamento: se esta conta não pertence a nenhum grupo válido, remove eventos de grupo herdados
+      _limparEventosDeGrupoOrfaos();
       updateHome();
     }
   },function(e){ console.warn('Realtime sync error:',e); });
@@ -4701,10 +4703,22 @@ function generateGroupCode(){
 
 function getCurrentGroup(){
   var raw = localStorage.getItem('claudio_current_group');
-  return raw ? JSON.parse(raw) : null;
+  if(!raw) return null;
+  try{
+    var g = JSON.parse(raw);
+    // Isolamento: o grupo só vale para a conta que o salvou.
+    // Se pertence a outro uid (outra conta neste aparelho), ignora e limpa.
+    if(g && g._ownerUid && currentUser && currentUser.uid && g._ownerUid !== currentUser.uid){
+      _limparDadosGrupoLocal();
+      return null;
+    }
+    return g;
+  }catch(e){ return null; }
 }
 
 function saveCurrentGroup(group){
+  // Marca o dono do grupo (conta atual) para isolar entre contas no mesmo aparelho
+  if(group && currentUser && currentUser.uid){ group._ownerUid = currentUser.uid; }
   localStorage.setItem('claudio_current_group', JSON.stringify(group));
 }
 
@@ -4863,6 +4877,18 @@ function mergeGroupEvents(groupEvents){
       date:e.date,time:e.time,color:e.color||'#8b5cf6',remind:0,fromGroup:true});
   });
   if(newEvents.length>0) save();
+}
+
+// Remove eventos de grupo (fromGroup) do state — usado quando a conta não pertence a grupo algum
+function _limparEventosDeGrupoOrfaos(){
+  if(!state.events) return;
+  var antes = state.events.length;
+  // Só mantém eventos que NÃO vieram de grupo (os próprios do usuário)
+  var grupo = getCurrentGroup();
+  if(!grupo){
+    state.events = state.events.filter(function(e){ return !e.fromGroup; });
+    if(state.events.length !== antes) save();
+  }
 }
 
 function getSharedEventsFromGroup(){
@@ -5543,11 +5569,27 @@ function excluirMinhaConta(){
 function logout(){
   logAuditEvent('logout', {});
   if(_firestoreUnsubscribe) _firestoreUnsubscribe();
+  // Limpa dados de grupo do aparelho para não vazar para a próxima conta neste dispositivo
+  _limparDadosGrupoLocal();
   auth.signOut().then(function(){
     currentUser=null;
     state=_emptyState();
     closeProfileModal(); showLoginScreen(); toast('Sessão encerrada');
   });
+}
+
+// Remove do localStorage o grupo atual e os caches de grupo (isolamento entre contas no mesmo aparelho)
+function _limparDadosGrupoLocal(){
+  try{
+    localStorage.removeItem('claudio_current_group');
+    // remove todos os caches claudio_group_*
+    var remover=[];
+    for(var i=0;i<localStorage.length;i++){
+      var k=localStorage.key(i);
+      if(k && k.indexOf('claudio_group_')===0) remover.push(k);
+    }
+    remover.forEach(function(k){ localStorage.removeItem(k); });
+  }catch(e){}
 }
 
 function recoverPassword(){
