@@ -8,7 +8,7 @@
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, X-HOTMART-HOTTOK, hottok',
   'Content-Type': 'application/json'
 };
 
@@ -25,6 +25,27 @@ const PREMIUM_OFF = [
   'PURCHASE_REFUNDED',        // reembolso
   'SUBSCRIPTION_CANCELLATION' // cancelamento de assinatura
 ];
+
+// ── Extrai o e-mail do comprador de várias estruturas possíveis do payload ──
+// O Hotmart v2.0.0 pode aninhar o e-mail em lugares diferentes conforme o evento.
+function extractEmail(payload) {
+  const d = payload?.data || {};
+  return (
+    d?.buyer?.email ||
+    d?.subscriber?.email ||
+    d?.subscription?.subscriber?.email ||
+    d?.purchase?.buyer?.email ||
+    d?.contact?.email ||
+    payload?.buyer?.email ||
+    payload?.email ||
+    ''
+  );
+}
+
+// ── Extrai o nome do evento de várias estruturas possíveis ──
+function extractEvent(payload) {
+  return payload?.event || payload?.data?.event || payload?.webhook?.event || '';
+}
 
 export async function onRequestPost(context) {
   const { request, env } = context;
@@ -43,14 +64,27 @@ export async function onRequestPost(context) {
 
     // 2. Lê o payload
     const payload = await request.json();
-    const event = payload?.event;
-    const email = payload?.data?.buyer?.email || payload?.data?.subscriber?.email || '';
+
+    // ── LOG DE DIAGNÓSTICO ──
+    // Registra o payload completo para inspecionarmos a estrutura real no log da function.
+    // (Remover depois que o fluxo estiver validado, para não poluir os logs.)
+    console.log('=== PAYLOAD RECEBIDO ===');
+    console.log(JSON.stringify(payload));
+    console.log('========================');
+
+    const event = extractEvent(payload);
+    const email = extractEmail(payload);
+
+    console.log(`Evento extraído: "${event}" | E-mail extraído: "${email}"`);
 
     if (!event || !email) {
-      return new Response(JSON.stringify({ error: 'Payload inválido' }), { status: 400, headers: CORS });
+      // Log detalhado do que faltou, pra facilitar o diagnóstico
+      console.warn(`Payload inválido — event: "${event}", email: "${email}". Chaves de data: ${JSON.stringify(Object.keys(payload?.data || {}))}`);
+      return new Response(JSON.stringify({
+        error: 'Payload inválido',
+        debug: { event: event || null, emailFound: !!email, dataKeys: Object.keys(payload?.data || {}) }
+      }), { status: 400, headers: CORS });
     }
-
-    console.log(`Hotmart webhook: ${event} | ${email}`);
 
     // 3. Determina ação
     let premiumValue = null;
