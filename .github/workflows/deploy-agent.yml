@@ -1,1 +1,113 @@
+# .github/workflows/deploy-agent.yml
+#
+# Duas formas de disparo:
+#
+# 1) COMANDO MANUAL — comente "@claude <o que você quer>" em qualquer
+#    issue ou Pull Request (dá pra fazer isso pelo próprio app do GitHub
+#    no celular). O Claude executa o comando seguindo as regras do
+#    CLAUDE.md deste repositório.
+#
+# 2) AUTOMÁTICO — a cada push na branch main: instala, builda, testa e
+#    faz o deploy. Se algo falhar, o Claude investiga a causa e, se for
+#    seguro, já corrige e abre um Pull Request.
+#
+# CONFIGURAÇÃO NECESSÁRIA (uma vez por repositório):
+#
+#   Settings > Secrets and variables > Actions > Secrets:
+#     - ANTHROPIC_API_KEY     (chave da API da Anthropic)
+#     - CLOUDFLARE_API_TOKEN  (token com permissão "Cloudflare Pages: Edit")
+#     - CLOUDFLARE_ACCOUNT_ID (ID da sua conta Cloudflare)
+#
+#   Settings > Secrets and variables > Actions > Variables:
+#     - CF_PROJECT_NAME  (nome do projeto no Cloudflare Pages)
+#     - CF_BUILD_DIR     (pasta com os arquivos finais; use "." se o
+#                          projeto for um HTML estático na raiz)
+#
+#   Além disso, rode `/install-github-app` no Claude Code uma vez para
+#   conectar este repositório ao GitHub — ele mesmo configura o app e os
+#   principais secrets.
 
+name: Claude Agent — Deploy e Operação
+
+on:
+  push:
+    branches: [main]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+jobs:
+  comando-manual:
+    if: github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Executa o comando pedido via comentário
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: |
+            --allowed-tools Bash,Edit,Write
+
+  build-e-deploy:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar dependências e build (se houver)
+        run: |
+          if [ -f package.json ]; then
+            npm install
+            npm run build --if-present
+          else
+            echo "Sem package.json — projeto estático, nada para instalar/buildar."
+          fi
+
+      - name: Testes (se houver)
+        run: |
+          if [ -f package.json ]; then npm test --if-present; fi
+
+      - name: Deploy — Cloudflare Pages
+        run: |
+          npx wrangler pages deploy "${{ vars.CF_BUILD_DIR || '.' }}" \
+            --project-name="${{ vars.CF_PROJECT_NAME }}"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+  se-algo-falhou:
+    needs: build-e-deploy
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Claude investiga e corrige (se for seguro)
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            O build, os testes ou o deploy falharam no último push na main.
+            Siga as regras do CLAUDE.md deste repositório. Investigue a causa
+            olhando o log deste workflow. Se for um erro simples e seguro de
+            corrigir (dependência faltando, import quebrado, variável de
+            ambiente mal referenciada), corrija e abra um Pull Request
+            explicando a mudança. Se envolver lógica de negócio, dados de
+            produção ou pagamentos, NÃO corrija sozinho — apenas descreva o
+            erro e a causa provável num comentário claro.
+          claude_args: |
+            --allowed-tools Bash,Edit,Write
