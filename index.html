@@ -1933,6 +1933,20 @@ try {
 } catch(e) {
   console.error('Firebase init falhou:', e);
 }
+
+// Pega o ID Token do usuário logado, pra autenticar chamadas às Cloudflare
+// Functions (/api/chat, /api/analisar). Sem isso, esses endpoints recusam
+// a requisição (401).
+async function _getAuthHeader(){
+  try{
+    if(!auth || !auth.currentUser) return {};
+    var token = await auth.currentUser.getIdToken();
+    return { 'Authorization': 'Bearer ' + token };
+  }catch(e){
+    console.warn('Não foi possível obter o ID token:', e);
+    return {};
+  }
+}
 // ═══════════════════════════════════════
 // CONSTANTS & STATE
 // ═══════════════════════════════════════
@@ -4493,9 +4507,10 @@ async function analyzeImageWithAI(){
   if(results) results.style.display = 'none';
 
   try{
+    var authHeaders = await _getAuthHeader();
     var response = await fetch('/api/analisar', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders),
       body: JSON.stringify({ image: _cameraImageBase64 })
     });
 
@@ -6378,9 +6393,10 @@ function _pdfAsImageFallback(file, proc){
 
 async function _sendToExtratoAPI(payload, processingBubble){
   try{
+    var authHeaders = await _getAuthHeader();
     var resp = await fetch('/api/extrato', {
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers: Object.assign({'Content-Type':'application/json'}, authHeaders),
       body: JSON.stringify(payload)
     });
     if(processingBubble) processingBubble.remove();
@@ -8007,9 +8023,10 @@ async function aiChatSend(){
   var typing=_aiAddBubble('digitando...','ai-typing');
 
   try{
+    var authHeaders = await _getAuthHeader();
     var resp=await fetch('/api/chat',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers: Object.assign({'Content-Type':'application/json'}, authHeaders),
       body:JSON.stringify({ message:msg, history:_aiChatHistory.slice(-8), context:_aiBuildContext(msg) })
     });
     if(typing) typing.remove();
