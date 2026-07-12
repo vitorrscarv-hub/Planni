@@ -1950,7 +1950,10 @@ async function _getAuthHeader(){
       });
     }
     if(!user) return {};
-    var token = await user.getIdToken();
+    // Força renovação se o token estiver perto de expirar/vencido.
+    // O ID Token do Firebase dura 1h; sem o "true", getIdToken pode
+    // devolver um token já vencido e o servidor recusa com 401.
+    var token = await user.getIdToken(true);
     return { 'Authorization': 'Bearer ' + token };
   }catch(e){
     console.warn('Não foi possível obter o ID token:', e);
