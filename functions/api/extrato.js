@@ -7,19 +7,59 @@
 // ARQUITETURA EM CAMADAS:
 //   Camada 1: parser nativo OFX/CSV (parser.js) - sem IA, custo zero, 100% confiavel.
 //   Camada 2: Gemini com retry - usado para PDF/imagem ou texto que o parser nao entendeu.
+//
+// Exige autenticação: o client precisa mandar o header
+// "Authorization: Bearer <idToken>" com o ID Token do Firebase do usuário
+// logado. Sem isso, o endpoint recusa a requisição — mesmo a Camada 1
+// (sem custo de IA) fica atrás do login, pra ninguém usar isso como
+// processador de extrato genérico e gratuito fora do app.
 
 import { parseLocal } from './parser.js';
 
-const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Content-Type': 'application/json' };
+const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization', 'Content-Type': 'application/json' };
 
 const PROMPT = 'Voce e um assistente financeiro que analisa extratos bancarios brasileiros (PIX, cartao de credito, debito, TED, boletos, salario). Extraia TODAS as transacoes encontradas no conteudo fornecido. Para cada transacao, identifique: descricao curta e clara, valor (sempre positivo, numero), tipo (in para receita/credito, out para despesa/debito), data no formato YYYY-MM-DD, categoria, e quando for PIX ou TED, tente identificar o nome da pessoa ou empresa envolvida. As categorias possiveis sao: alimentacao, transporte, moradia, saude, lazer, compras, educacao, servicos, salario, investimentos, outros. Regras importantes: nunca invente transacoes que nao estao no texto; se um valor ou data estiver ilegivel, pule essa transacao; PIX recebido e credito (in), PIX enviado e debito (out); pagamento de fatura de cartao dentro do extrato da conta corrente deve ser categoria servicos; salario e tipo in categoria salario. Responda SOMENTE com JSON valido, sem texto antes ou depois, sem markdown, no formato exato: {"transactions":[{"desc":"texto curto","val":99.90,"type":"in ou out","cat":"categoria","date":"YYYY-MM-DD","pessoa":"nome ou null"}]}. Se nao encontrar nenhuma transacao valida, devolva {"transactions":[]}.';
 
 // Tipos de arquivo aceitos para envio multimodal ao Gemini
 const ALLOWED_MIMES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
 
+// Limite de tamanho da imagem em base64 (~6MB de imagem/PDF original)
+const MAX_IMAGE_LEN = 8 * 1024 * 1024;
+
+// ── Verifica o ID Token do Firebase enviado no header Authorization ──────────
+// Retorna o uid do usuário se o token for válido, ou null caso contrário.
+async function verifyFirebaseToken(request, env) {
+  const authHeader = request.headers.get('Authorization') || '';
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) return null;
+  const idToken = match[1];
+
+  try {
+    const res = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${env.FIREBASE_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken })
+      }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.users?.[0]?.localId || null;
+  } catch (e) {
+    return null;
+  }
+}
+
 export async function onRequestPost(context) {
   const { request, env } = context;
   try {
+    // 0. Autenticação — bloqueia qualquer chamada sem usuário logado válido
+    const uid = await verifyFirebaseToken(request, env);
+    if (!uid) {
+      return new Response(JSON.stringify({ error: 'Não autenticado.' }), { status: 401, headers: CORS });
+    }
+
     const key = env.GEMINI_API_KEY;
     if (!key) return new Response(JSON.stringify({ error: 'GEMINI_API_KEY nao configurada.' }), { status: 500, headers: CORS });
 
@@ -30,6 +70,9 @@ export async function onRequestPost(context) {
     let mime = body && body.mime ? String(body.mime) : 'image/jpeg';
     if (ALLOWED_MIMES.indexOf(mime) === -1) mime = 'image/jpeg';
     if (!text && !image) return new Response(JSON.stringify({ error: 'Nenhum conteudo enviado.' }), { status: 400, headers: CORS });
+    if (image && image.length > MAX_IMAGE_LEN) {
+      return new Response(JSON.stringify({ error: 'Arquivo grande demais.' }), { status: 400, headers: CORS });
+    }
 
     // ===== CAMADA 1: parser nativo OFX/CSV (sem IA) =====
     // Se veio texto (OFX/CSV), tenta ler localmente. Custo zero, instantaneo, nunca da 503.
