@@ -3,6 +3,11 @@
 // Recebe { message, history, context } e devolve { reply, actions }.
 // actions = lista de ações que o app deve executar (criar evento/tarefa/etc).
 // A chave fica em GEMINI_API_KEY (variável de ambiente), nunca no client.
+//
+// Exige autenticação: o client precisa mandar o header
+// "Authorization: Bearer <idToken>" com o ID Token do Firebase do usuário
+// logado. Sem isso, o endpoint recusa a requisição — isso evita que
+// qualquer pessoa fora do app consuma sua cota do Gemini de graça.
 
 const SYSTEM = `Você é o assistente do app Planni, um organizador pessoal de finanças, agenda, tarefas e notas (em português do Brasil).
 Você recebe o estado atual do app no contexto. Use-o para responder perguntas e dar insights úteis, diretos e curtos.
@@ -77,28 +82,74 @@ const TOOLS = [{
   ]
 }];
 
+// Limites de entrada (defesa extra, além da autenticação)
+const MAX_MESSAGE_LEN = 4000;
+const MAX_HISTORY_ITEMS = 20;
+const MAX_CONTEXT_LEN = 30000; // caracteres, após JSON.stringify
+
+// ── Verifica o ID Token do Firebase enviado no header Authorization ──────────
+// Retorna o uid do usuário se o token for válido, ou null caso contrário.
+async function verifyFirebaseToken(request, env) {
+  const authHeader = request.headers.get('Authorization') || '';
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) return null;
+  const idToken = match[1];
+
+  try {
+    const res = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${env.FIREBASE_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken })
+      }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.users?.[0]?.localId || null;
+  } catch (e) {
+    return null;
+  }
+}
+
 export async function onRequestPost(context) {
   const { request, env } = context;
   const cors = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Content-Type': 'application/json'
   };
 
   try {
+    // 0. Autenticação — bloqueia qualquer chamada sem usuário logado válido
+    const uid = await verifyFirebaseToken(request, env);
+    if (!uid) {
+      return new Response(JSON.stringify({ error: 'Não autenticado.' }), { status: 401, headers: cors });
+    }
+
     const key = env.GEMINI_API_KEY;
     if (!key) return new Response(JSON.stringify({ error: 'GEMINI_API_KEY não configurada.' }), { status: 500, headers: cors });
 
     const body = await request.json();
-    const message = (body && body.message) || '';
-    const history = (body && body.history) || [];
+    let message = (body && body.message) || '';
+    let history = (body && body.history) || [];
     const ctx = (body && body.context) || {};
     if (!message) return new Response(JSON.stringify({ error: 'Mensagem ausente.' }), { status: 400, headers: cors });
 
+    // Limites de tamanho — evita abuso mesmo vindo de um usuário autenticado
+    if (message.length > MAX_MESSAGE_LEN) message = message.slice(0, MAX_MESSAGE_LEN);
+    if (Array.isArray(history) && history.length > MAX_HISTORY_ITEMS) {
+      history = history.slice(-MAX_HISTORY_ITEMS);
+    }
+    let ctxStr = JSON.stringify(ctx);
+    if (ctxStr.length > MAX_CONTEXT_LEN) {
+      return new Response(JSON.stringify({ error: 'Contexto enviado é grande demais.' }), { status: 400, headers: cors });
+    }
+
     // Build conversation: system + context as first user turn, then history, then new message
     const contents = [];
-    contents.push({ role: 'user', parts: [{ text: SYSTEM + '\n\n=== ESTADO ATUAL DO APP ===\n' + JSON.stringify(ctx) }] });
+    contents.push({ role: 'user', parts: [{ text: SYSTEM + '\n\n=== ESTADO ATUAL DO APP ===\n' + ctxStr }] });
     contents.push({ role: 'model', parts: [{ text: 'Entendido. Estou pronto para ajudar com seus dados.' }] });
     (history || []).forEach(function (h) {
       contents.push({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: String(h.text || '') }] });
@@ -171,7 +222,7 @@ export async function onRequestOptions() {
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type'
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
     }
   });
 }
