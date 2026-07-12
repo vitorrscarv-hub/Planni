@@ -1939,8 +1939,18 @@ try {
 // a requisição (401).
 async function _getAuthHeader(){
   try{
-    if(!auth || !auth.currentUser) return {};
-    var token = await auth.currentUser.getIdToken();
+    if(!auth) return {};
+    var user = auth.currentUser;
+    if(!user){
+      // O Firebase ainda pode estar restaurando a sessão (acontece logo
+      // após abrir o app). Espera esse processo terminar antes de desistir,
+      // em vez de mandar a requisição sem token e tomar 401 à toa.
+      user = await new Promise(function(resolve){
+        var unsub = auth.onAuthStateChanged(function(u){ unsub(); resolve(u); });
+      });
+    }
+    if(!user) return {};
+    var token = await user.getIdToken();
     return { 'Authorization': 'Bearer ' + token };
   }catch(e){
     console.warn('Não foi possível obter o ID token:', e);
