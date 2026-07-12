@@ -1,9 +1,16 @@
 // Cloudflare Pages Function — POST /api/hotmart
 // Recebe webhooks do Hotmart e atualiza o campo premium no Firebase
 // Variáveis de ambiente necessárias no Cloudflare:
-//   HOTMART_SECRET      → chave secreta do webhook (Hottok)
-//   FIREBASE_PROJECT_ID → ID do projeto Firebase (smart-life-finance)
-//   FIREBASE_API_KEY    → Web API Key do Firebase
+//   HOTMART_SECRET        → chave secreta do webhook (Hottok)
+//   FIREBASE_PROJECT_ID   → ID do projeto Firebase (smart-life-finance)
+//   FIREBASE_API_KEY      → Web API Key do Firebase (usada só para o lookup de e-mail)
+//   FIREBASE_CLIENT_EMAIL → "client_email" do JSON da conta de serviço do Firebase
+//   FIREBASE_PRIVATE_KEY  → "private_key" do JSON da conta de serviço do Firebase
+//
+// FIREBASE_CLIENT_EMAIL e FIREBASE_PRIVATE_KEY vêm do arquivo JSON gerado em:
+// Firebase Console → Configurações do projeto → Contas de serviço →
+// Gerar nova chave privada. Cole o valor de "private_key" inteiro (com as
+// quebras de linha \n) no secret do Cloudflare.
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -52,8 +59,6 @@ export async function onRequestPost(context) {
 
   try {
     // 1. Valida a chave secreta do Hotmart (Hottok)
-    // O Hotmart envia esse token no cabeçalho "X-HOTMART-HOTTOK" (doc oficial).
-    // Mantemos "hottok" como fallback só por segurança, mas o nome certo é o de cima.
     const hottok = request.headers.get('X-HOTMART-HOTTOK')
                 || request.headers.get('hottok')
                 || '';
@@ -65,21 +70,14 @@ export async function onRequestPost(context) {
     // 2. Lê o payload
     const payload = await request.json();
 
-    // ── LOG DE DIAGNÓSTICO ──
-    // Registra o payload completo para inspecionarmos a estrutura real no log da function.
-    // (Remover depois que o fluxo estiver validado, para não poluir os logs.)
-    console.log('=== PAYLOAD RECEBIDO ===');
-    console.log(JSON.stringify(payload));
-    console.log('========================');
-
     const event = extractEvent(payload);
     const email = extractEmail(payload);
 
-    console.log(`Evento extraído: "${event}" | E-mail extraído: "${email}"`);
+    // Log só do essencial (sem o payload inteiro, pra não vazar dado de comprador no log)
+    console.log(`Webhook recebido — evento: "${event}", e-mail presente: ${!!email}`);
 
     if (!event || !email) {
-      // Log detalhado do que faltou, pra facilitar o diagnóstico
-      console.warn(`Payload inválido — event: "${event}", email: "${email}". Chaves de data: ${JSON.stringify(Object.keys(payload?.data || {}))}`);
+      console.warn(`Payload inválido — event: "${event}", emailFound: ${!!email}. Chaves de data: ${JSON.stringify(Object.keys(payload?.data || {}))}`);
       return new Response(JSON.stringify({
         error: 'Payload inválido',
         debug: { event: event || null, emailFound: !!email, dataKeys: Object.keys(payload?.data || {}) }
@@ -92,7 +90,6 @@ export async function onRequestPost(context) {
     if (PREMIUM_OFF.includes(event)) premiumValue = false;
 
     if (premiumValue === null) {
-      // Evento que não nos interessa — responde 200 pra o Hotmart não retentar
       return new Response(JSON.stringify({ ok: true, action: 'ignored', event }), { status: 200, headers: CORS });
     }
 
@@ -100,15 +97,15 @@ export async function onRequestPost(context) {
     const uid = await getUidByEmail(email, env);
     if (!uid) {
       console.warn(`Usuário não encontrado no Firebase: ${email}`);
-      // Mesmo sem UID, responde 200 pra Hotmart não retentar desnecessariamente
       return new Response(JSON.stringify({ ok: true, action: 'user_not_found', email }), { status: 200, headers: CORS });
     }
 
-    // 5. Atualiza o campo premium no Firestore
-    await setPremiumFirestore(uid, premiumValue, env);
+    // 5. Atualiza o campo premium no Firestore usando credencial de SERVIÇO
+    //    (ignora as regras de segurança, como o firestore.rules já pressupõe).
+    await setPremiumFirestoreAdmin(uid, premiumValue, env);
 
-    console.log(`Premium ${premiumValue ? 'ATIVADO' : 'REVOGADO'} para ${email} (${uid})`);
-    return new Response(JSON.stringify({ ok: true, action: premiumValue ? 'activated' : 'revoked', email, uid }), { status: 200, headers: CORS });
+    console.log(`Premium ${premiumValue ? 'ATIVADO' : 'REVOGADO'} para uid ${uid}`);
+    return new Response(JSON.stringify({ ok: true, action: premiumValue ? 'activated' : 'revoked', uid }), { status: 200, headers: CORS });
 
   } catch (err) {
     console.error('Erro no webhook:', err);
@@ -133,20 +130,102 @@ async function getUidByEmail(email, env) {
   return data?.users?.[0]?.localId || null;
 }
 
-// ── Atualiza o campo premium no Firestore via REST API ───────────────────────
-async function setPremiumFirestore(uid, value, env) {
-  const project = env.FIREBASE_PROJECT_ID;
-  const url = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=premium&key=${env.FIREBASE_API_KEY}`;
-  const body = {
-    fields: {
-      premium: { booleanValue: value }
-    }
+// ── Codifica em base64url (string ou ArrayBuffer/Uint8Array) ─────────────────
+function base64UrlEncode(input) {
+  let bytes;
+  if (typeof input === 'string') {
+    bytes = new TextEncoder().encode(input);
+  } else {
+    bytes = new Uint8Array(input);
+  }
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+// ── Converte a chave privada PEM em ArrayBuffer (formato PKCS8) ──────────────
+function pemToArrayBuffer(pem) {
+  const b64 = pem
+    .replace(/-----BEGIN PRIVATE KEY-----/, '')
+    .replace(/-----END PRIVATE KEY-----/, '')
+    .replace(/\r/g, '')
+    .replace(/\n/g, '')
+    .trim();
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+// ── Gera um Access Token do Google via conta de serviço (JWT assertion) ──────
+// Esse token, ao contrário da Web API Key, é tratado pelo Firestore como
+// acesso administrativo e IGNORA as regras de segurança — igual ao Admin SDK.
+async function getGoogleAccessToken(env) {
+  const clientEmail = env.FIREBASE_CLIENT_EMAIL;
+  const privateKeyPem = (env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+  if (!clientEmail || !privateKeyPem) {
+    throw new Error('FIREBASE_CLIENT_EMAIL ou FIREBASE_PRIVATE_KEY não configuradas.');
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: 'RS256', typ: 'JWT' };
+  const claims = {
+    iss: clientEmail,
+    scope: 'https://www.googleapis.com/auth/datastore',
+    aud: 'https://oauth2.googleapis.com/token',
+    iat: now,
+    exp: now + 3600
   };
+
+  const unsigned = base64UrlEncode(JSON.stringify(header)) + '.' + base64UrlEncode(JSON.stringify(claims));
+
+  const cryptoKey = await crypto.subtle.importKey(
+    'pkcs8',
+    pemToArrayBuffer(privateKeyPem),
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+
+  const signature = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5',
+    cryptoKey,
+    new TextEncoder().encode(unsigned)
+  );
+
+  const jwt = unsigned + '.' + base64UrlEncode(signature);
+
+  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'grant_type=' + encodeURIComponent('urn:ietf:params:oauth:grant-type:jwt-bearer') + '&assertion=' + encodeURIComponent(jwt)
+  });
+
+  if (!tokenRes.ok) {
+    const errText = await tokenRes.text();
+    throw new Error(`Falha ao obter access token do Google: ${tokenRes.status} — ${errText}`);
+  }
+
+  const tokenData = await tokenRes.json();
+  return tokenData.access_token;
+}
+
+// ── Atualiza o campo premium no Firestore com credencial de serviço ──────────
+async function setPremiumFirestoreAdmin(uid, value, env) {
+  const accessToken = await getGoogleAccessToken(env);
+  const project = env.FIREBASE_PROJECT_ID;
+  const url = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=premium`;
+  const body = { fields: { premium: { booleanValue: value } } };
+
   const res = await fetch(url, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + accessToken
+    },
     body: JSON.stringify(body)
   });
+
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Firestore error: ${res.status} — ${err}`);
