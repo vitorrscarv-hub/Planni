@@ -1937,7 +1937,7 @@ try {
 // Pega o ID Token do usuário logado, pra autenticar chamadas às Cloudflare
 // Functions (/api/chat, /api/analisar). Sem isso, esses endpoints recusam
 // a requisição (401).
-async function _getAuthHeader(){
+async function _getAuthHeader(forcarRenovacao){
   try{
     if(!auth) return {};
     var user = auth.currentUser;
@@ -1950,15 +1950,38 @@ async function _getAuthHeader(){
       });
     }
     if(!user) return {};
-    // Força renovação se o token estiver perto de expirar/vencido.
-    // O ID Token do Firebase dura 1h; sem o "true", getIdToken pode
-    // devolver um token já vencido e o servidor recusa com 401.
-    var token = await user.getIdToken(true);
+    // getIdToken() usa o token em cache e o próprio SDK renova quando expira.
+    // NÃO forçar renovação em toda chamada: getIdToken(true) faz uma requisição
+    // de rede extra ao Google a cada mensagem, que é limitada por quota e falha
+    // de forma intermitente — quando falhava, a chamada seguia SEM o header
+    // Authorization e o servidor respondia 401 mesmo com o usuário logado.
+    // A renovação forçada só é usada no retry após um 401 (ver _fetchAutenticado).
+    var token;
+    try{
+      token = await user.getIdToken(!!forcarRenovacao);
+    }catch(e){
+      // Renovação forçada falhou (rede/quota): tenta o token em cache,
+      // que ainda pode estar válido, antes de desistir.
+      token = await user.getIdToken(false);
+    }
     return { 'Authorization': 'Bearer ' + token };
   }catch(e){
     console.warn('Não foi possível obter o ID token:', e);
     return {};
   }
+}
+
+// POST autenticado para as Functions (/api/chat, /api/analisar, /api/extrato).
+// Se o servidor responder 401 (ex: token em cache que acabou de expirar),
+// renova o token à força e repete a requisição UMA vez antes de desistir.
+async function _fetchAutenticado(url, bodyStr){
+  var headers = Object.assign({'Content-Type':'application/json'}, await _getAuthHeader());
+  var resp = await fetch(url, { method:'POST', headers: headers, body: bodyStr });
+  if(resp.status === 401){
+    headers = Object.assign({'Content-Type':'application/json'}, await _getAuthHeader(true));
+    resp = await fetch(url, { method:'POST', headers: headers, body: bodyStr });
+  }
+  return resp;
 }
 // ═══════════════════════════════════════
 // CONSTANTS & STATE
@@ -4520,12 +4543,8 @@ async function analyzeImageWithAI(){
   if(results) results.style.display = 'none';
 
   try{
-    var authHeaders = await _getAuthHeader();
-    var response = await fetch('/api/analisar', {
-      method: 'POST',
-      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders),
-      body: JSON.stringify({ image: _cameraImageBase64 })
-    });
+    var response = await _fetchAutenticado('/api/analisar',
+      JSON.stringify({ image: _cameraImageBase64 }));
 
     if(!response.ok){
       throw new Error('API error: '+response.status);
@@ -6406,12 +6425,7 @@ function _pdfAsImageFallback(file, proc){
 
 async function _sendToExtratoAPI(payload, processingBubble){
   try{
-    var authHeaders = await _getAuthHeader();
-    var resp = await fetch('/api/extrato', {
-      method:'POST',
-      headers: Object.assign({'Content-Type':'application/json'}, authHeaders),
-      body: JSON.stringify(payload)
-    });
+    var resp = await _fetchAutenticado('/api/extrato', JSON.stringify(payload));
     if(processingBubble) processingBubble.remove();
 
     // Le o corpo SEMPRE, mesmo em erro, para aproveitar a mensagem do backend
@@ -8036,12 +8050,8 @@ async function aiChatSend(){
   var typing=_aiAddBubble('digitando...','ai-typing');
 
   try{
-    var authHeaders = await _getAuthHeader();
-    var resp=await fetch('/api/chat',{
-      method:'POST',
-      headers: Object.assign({'Content-Type':'application/json'}, authHeaders),
-      body:JSON.stringify({ message:msg, history:_aiChatHistory.slice(-8), context:_aiBuildContext(msg) })
-    });
+    var resp=await _fetchAutenticado('/api/chat',
+      JSON.stringify({ message:msg, history:_aiChatHistory.slice(-8), context:_aiBuildContext(msg) }));
     if(typing) typing.remove();
 
     // Le o corpo sempre, mesmo em erro, para aproveitar a mensagem do backend
