@@ -58,8 +58,19 @@ async function verifyFirebaseUser(request, env) {
         transient: false
       };
     }
-    // 400 = token realmente inválido/expirado; repetir não muda o resultado.
-    if (res && res.status === 400) return { uid: null, email: '', transient: false };
+    // 400 = resposta definitiva do Google; repetir não muda o resultado.
+    if (res && res.status === 400) {
+      let msg = '';
+      try { msg = (JSON.parse(await res.text()))?.error?.message || ''; } catch (e) {}
+      // "API key not valid" = FIREBASE_API_KEY errada no Cloudflare — erro de
+      // configuração do SERVIDOR, não do token do usuário: nunca vira 401.
+      if (/api key/i.test(msg)) {
+        console.error('FIREBASE_API_KEY rejeitada pelo Google: ' + msg);
+        return { uid: null, email: '', transient: false, configError: true };
+      }
+      // Token realmente inválido/expirado.
+      return { uid: null, email: '', transient: false };
+    }
     if (attempt < MAX_TRIES) {
       await new Promise((r) => setTimeout(r, attempt * 400));
     }
@@ -73,6 +84,14 @@ export async function onRequestPost(context) {
   try {
     const user = await verifyFirebaseUser(request, env);
     if (!user.uid) {
+      if (user.configError) {
+        // FIREBASE_API_KEY errada no Cloudflare: problema do servidor, não do
+        // usuário — nunca mostrar "Não autenticado" para isso.
+        return new Response(
+          JSON.stringify({ error: 'Erro de configuração no servidor. Tente novamente mais tarde.' }),
+          { status: 500, headers: CORS }
+        );
+      }
       if (user.transient) {
         return new Response(
           JSON.stringify({ error: 'Não consegui validar sua sessão agora. Tente novamente em instantes.', overloaded: true }),

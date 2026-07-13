@@ -56,9 +56,19 @@ async function verifyFirebaseToken(request, env) {
       const data = await res.json().catch(() => null);
       return { uid: data?.users?.[0]?.localId || null, transient: false };
     }
-    // 400 = o Google analisou o token e ele é realmente inválido/expirado;
-    // repetir não muda o resultado.
-    if (res && res.status === 400) return { uid: null, transient: false };
+    // 400 = resposta definitiva do Google; repetir não muda o resultado.
+    if (res && res.status === 400) {
+      let msg = '';
+      try { msg = (JSON.parse(await res.text()))?.error?.message || ''; } catch (e) {}
+      // "API key not valid" = FIREBASE_API_KEY errada no Cloudflare — erro de
+      // configuração do SERVIDOR, não do token do usuário: nunca vira 401.
+      if (/api key/i.test(msg)) {
+        console.error('FIREBASE_API_KEY rejeitada pelo Google: ' + msg);
+        return { uid: null, transient: false, configError: true };
+      }
+      // Token realmente inválido/expirado.
+      return { uid: null, transient: false };
+    }
     if (attempt < MAX_TRIES) {
       await new Promise((r) => setTimeout(r, attempt * 400));
     }
@@ -80,6 +90,14 @@ export async function onRequestPost(context) {
     // 0. Autenticação — bloqueia qualquer chamada sem usuário logado válido
     const auth = await verifyFirebaseToken(request, env);
     if (!auth.uid) {
+      if (auth.configError) {
+        // FIREBASE_API_KEY errada no Cloudflare: problema do servidor, não do
+        // usuário — nunca mostrar "Não autenticado" para isso.
+        return new Response(
+          JSON.stringify({ error: 'Erro de configuração no servidor. Tente novamente mais tarde.' }),
+          { status: 500, headers: cors }
+        );
+      }
       if (auth.transient) {
         // Falha temporária ao validar (não é culpa do usuário): 503 com
         // mensagem amigável, em vez de um 401 enganoso de "Não autenticado".

@@ -132,7 +132,15 @@ async function getUidByEmail(email, env) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: [email] })
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    let msg = '';
+    try { msg = (JSON.parse(await res.text()))?.error?.message || ''; } catch (e) {}
+    // FIREBASE_API_KEY errada no Cloudflare: falhar alto (vira 500, e o
+    // Hotmart reenvia) em vez de fingir "usuário não encontrado" para uma
+    // conta que existe.
+    if (/api key/i.test(msg)) throw new Error('FIREBASE_API_KEY rejeitada pelo Google: ' + msg);
+    return null;
+  }
   const data = await res.json();
   return data?.users?.[0]?.localId || null;
 }
