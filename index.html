@@ -8116,7 +8116,13 @@ async function aiChatSend(){
       return;
     }
     if(!resp.ok || (data && data.error)){
-      _aiAddBubble((data && data.error) ? data.error : 'Ops, não consegui responder agora. Tente novamente.','ai-bot');
+      var errMsg = (data && data.error) ? data.error : 'Ops, não consegui responder agora. Tente novamente.';
+      // DIAGNÓSTICO TEMPORÁRIO (remover depois): no 401, mostra o authDebug
+      // na própria bolha, para leitura no celular sem DevTools.
+      if(resp.status === 401 && data && data.authDebug){
+        try{ errMsg += ' [debug: ' + JSON.stringify(data.authDebug) + ']'; }catch(e){}
+      }
+      _aiAddBubble(errMsg,'ai-bot');
       return;
     }
 
