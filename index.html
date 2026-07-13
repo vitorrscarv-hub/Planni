@@ -5023,8 +5023,33 @@ function _syncPremiumFromFirebase(uid){
         isPremium = !!(data && data.premium); // Firestore e a fonte da verdade
         localStorage.setItem('claudio_premium', isPremium ? 'true' : 'false'); // so cache de UI
         applyPremiumState();
+        if(!isPremium) _checkPendingPremium();
       }, function(e){ console.warn('Premium sync:', e); });
   }catch(e){}
+}
+
+// Resgate de compra feita ANTES do cadastro: se o usuário não é premium,
+// pergunta ao servidor (uma vez por sessão) se o webhook Hotmart deixou um
+// premium pendente para o e-mail desta conta. O servidor valida o token,
+// ativa em users/{uid} e o listener acima destrava a UI sozinho.
+var _pendingPremiumChecked = false;
+async function _checkPendingPremium(){
+  if(_pendingPremiumChecked) return;
+  _pendingPremiumChecked = true;
+  try{
+    var authHeaders = await _getAuthHeader();
+    if(!authHeaders.Authorization) return;
+    var resp = await fetch('/api/premium-pendente', {
+      method:'POST',
+      headers: Object.assign({'Content-Type':'application/json'}, authHeaders),
+      body:'{}'
+    });
+    var data = {};
+    try{ data = await resp.json(); }catch(e){}
+    if(data && data.activated){
+      toast('✦ Premium ativado! Sua compra foi encontrada.');
+    }
+  }catch(e){ console.warn('Premium pendente:', e); }
 }
 
 // O cliente NAO grava premium (isso e feito so pelo webhook Hotmart no servidor).
