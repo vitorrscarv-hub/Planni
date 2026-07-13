@@ -1937,19 +1937,35 @@ try {
 // Pega o ID Token do usuário logado, pra autenticar chamadas às Cloudflare
 // Functions (/api/chat, /api/analisar). Sem isso, esses endpoints recusam
 // a requisição (401).
-async function _getAuthHeader(forcarRenovacao){
+// DIAGNÓSTICO TEMPORÁRIO (remover depois): estado da última obtenção de token,
+// enviado ao servidor no header X-Auth-Debug e ecoado de volta no authDebug da
+// resposta 401 — visível na aba Network. Nunca inclui o token em si.
+var _authDebug = null;
+function _authDebugStr(){
   try{
-    if(!auth) return {};
+    // Headers HTTP só aceitam ASCII: remove acentos/caracteres especiais.
+    return JSON.stringify(_authDebug).replace(/[^\x20-\x7E]/g, '?').slice(0, 280);
+  }catch(e){ return 'erro_stringify'; }
+}
+
+async function _getAuthHeader(forcarRenovacao){
+  var dbg = { force: !!forcarRenovacao, currentUser: 'presente', esperouAuth: false, token: 'nao_tentado' };
+  _authDebug = dbg;
+  try{
+    if(!auth){ dbg.currentUser = 'firebase_sem_init'; return {}; }
     var user = auth.currentUser;
     if(!user){
+      dbg.currentUser = 'null';
+      dbg.esperouAuth = true;
       // O Firebase ainda pode estar restaurando a sessão (acontece logo
       // após abrir o app). Espera esse processo terminar antes de desistir,
       // em vez de mandar a requisição sem token e tomar 401 à toa.
       user = await new Promise(function(resolve){
         var unsub = auth.onAuthStateChanged(function(u){ unsub(); resolve(u); });
       });
+      dbg.aposEspera = user ? 'user_ok' : 'null';
     }
-    if(!user) return {};
+    if(!user){ dbg.token = 'sem_user'; return {}; }
     // getIdToken() usa o token em cache e o próprio SDK renova quando expira.
     // NÃO forçar renovação em toda chamada: getIdToken(true) faz uma requisição
     // de rede extra ao Google a cada mensagem, que é limitada por quota e falha
@@ -1959,13 +1975,18 @@ async function _getAuthHeader(forcarRenovacao){
     var token;
     try{
       token = await user.getIdToken(!!forcarRenovacao);
+      dbg.token = 'ok(len=' + (token ? token.length : 0) + ')';
     }catch(e){
+      dbg.erroGetIdToken = (e && e.code) || String(e).slice(0, 80);
       // Renovação forçada falhou (rede/quota): tenta o token em cache,
       // que ainda pode estar válido, antes de desistir.
       token = await user.getIdToken(false);
+      dbg.token = 'ok_fallback(len=' + (token ? token.length : 0) + ')';
     }
     return { 'Authorization': 'Bearer ' + token };
   }catch(e){
+    dbg.token = 'falhou';
+    dbg.erroFinal = (e && e.code) || String(e).slice(0, 80);
     console.warn('Não foi possível obter o ID token:', e);
     return {};
   }
@@ -1976,10 +1997,16 @@ async function _getAuthHeader(forcarRenovacao){
 // renova o token à força e repete a requisição UMA vez antes de desistir.
 async function _fetchAutenticado(url, bodyStr){
   var headers = Object.assign({'Content-Type':'application/json'}, await _getAuthHeader());
+  // DIAGNÓSTICO TEMPORÁRIO (remover depois): manda o estado do client junto,
+  // para o servidor ecoar no authDebug do 401.
+  headers['X-Auth-Debug'] = 'try1 ' + _authDebugStr();
   var resp = await fetch(url, { method:'POST', headers: headers, body: bodyStr });
   if(resp.status === 401){
+    console.warn('[auth-debug] 401 na 1a tentativa', _authDebug);
     headers = Object.assign({'Content-Type':'application/json'}, await _getAuthHeader(true));
+    headers['X-Auth-Debug'] = 'try2 ' + _authDebugStr();
     resp = await fetch(url, { method:'POST', headers: headers, body: bodyStr });
+    if(resp.status === 401) console.warn('[auth-debug] 401 tambem na 2a tentativa (retry)', _authDebug);
   }
   return resp;
 }

@@ -96,10 +96,18 @@ const MAX_CONTEXT_LEN = 30000; // caracteres, após JSON.stringify
 // a consulta ao identitytoolkit falhou momentaneamente (era a causa dos 401
 // intermitentes no chat).
 async function verifyFirebaseToken(request, env) {
+  // DIAGNÓSTICO TEMPORÁRIO (remover depois): registra o motivo exato de cada
+  // recusa, sem nunca logar o token em si — só presença/tamanho e as
+  // respostas do Google por tentativa.
+  const debug = { header: 'ausente', google: [] };
   const authHeader = request.headers.get('Authorization') || '';
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  if (!match) return { uid: null, transient: false };
+  if (!match) {
+    if (authHeader) debug.header = 'malformado(len=' + authHeader.length + ')';
+    return { uid: null, transient: false, debug };
+  }
   const idToken = match[1];
+  debug.header = 'bearer(len=' + idToken.length + ')';
 
   const MAX_TRIES = 3;
   for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
@@ -115,19 +123,28 @@ async function verifyFirebaseToken(request, env) {
       );
     } catch (e) {
       res = null; // erro de rede: trata como temporário e tenta de novo
+      debug.google.push('erro_rede:' + String(e && e.message || e).slice(0, 60));
     }
     if (res && res.ok) {
       const data = await res.json().catch(() => null);
-      return { uid: data?.users?.[0]?.localId || null, transient: false };
+      const uid = data?.users?.[0]?.localId || null;
+      if (!uid) debug.google.push('200_sem_usuario');
+      return { uid, transient: false, debug };
     }
     // 400 = o Google analisou o token e ele é realmente inválido/expirado;
     // repetir não muda o resultado.
-    if (res && res.status === 400) return { uid: null, transient: false };
+    if (res && res.status === 400) {
+      let code = '';
+      try { code = (JSON.parse(await res.text()))?.error?.message || ''; } catch (e) {}
+      debug.google.push('400:' + String(code).slice(0, 60));
+      return { uid: null, transient: false, debug };
+    }
+    if (res) debug.google.push(String(res.status));
     if (attempt < MAX_TRIES) {
       await new Promise((r) => setTimeout(r, attempt * 400));
     }
   }
-  return { uid: null, transient: true };
+  return { uid: null, transient: true, debug };
 }
 
 export async function onRequestPost(context) {
@@ -135,7 +152,7 @@ export async function onRequestPost(context) {
   const cors = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Auth-Debug',
     'Content-Type': 'application/json'
   };
 
@@ -143,15 +160,21 @@ export async function onRequestPost(context) {
     // 0. Autenticação — bloqueia qualquer chamada sem usuário logado válido
     const auth = await verifyFirebaseToken(request, env);
     if (!auth.uid) {
+      // DIAGNÓSTICO TEMPORÁRIO (remover depois): devolve o motivo exato da
+      // recusa no corpo (visível na aba Network) e loga para o live tail.
+      // clientDebug = estado do getIdToken no client, enviado em X-Auth-Debug.
+      const clientDebug = (request.headers.get('X-Auth-Debug') || '').slice(0, 300);
+      const authDebug = Object.assign({}, auth.debug, clientDebug ? { client: clientDebug } : {});
+      console.warn('AUTH-DEBUG 401/503:', JSON.stringify({ transient: !!auth.transient, ...authDebug }));
       if (auth.transient) {
         // Falha temporária ao validar (não é culpa do usuário): 503 com
         // mensagem amigável, em vez de um 401 enganoso de "Não autenticado".
         return new Response(
-          JSON.stringify({ error: 'Não consegui validar sua sessão agora. Tente novamente em instantes.', overloaded: true }),
+          JSON.stringify({ error: 'Não consegui validar sua sessão agora. Tente novamente em instantes.', overloaded: true, authDebug }),
           { status: 503, headers: cors }
         );
       }
-      return new Response(JSON.stringify({ error: 'Não autenticado.' }), { status: 401, headers: cors });
+      return new Response(JSON.stringify({ error: 'Não autenticado.', authDebug }), { status: 401, headers: cors });
     }
 
     const key = env.GEMINI_API_KEY;
@@ -248,7 +271,7 @@ export async function onRequestOptions() {
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Auth-Debug'
     }
   });
 }
