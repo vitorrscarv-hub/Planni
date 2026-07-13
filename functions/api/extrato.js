@@ -27,36 +27,61 @@ const ALLOWED_MIMES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp
 const MAX_IMAGE_LEN = 8 * 1024 * 1024;
 
 // ── Verifica o ID Token do Firebase enviado no header Authorization ──────────
-// Retorna o uid do usuário se o token for válido, ou null caso contrário.
+// Retorna { uid, transient }:
+//   uid       = id do usuário se o token for válido, ou null.
+//   transient = true quando NÃO foi possível validar por falha temporária do
+//               Google (429/5xx/erro de rede) — o token pode ser válido.
+// Distinguir os dois casos evita rejeitar com 401 um usuário logado só porque
+// a consulta ao identitytoolkit falhou momentaneamente.
 async function verifyFirebaseToken(request, env) {
   const authHeader = request.headers.get('Authorization') || '';
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  if (!match) return null;
+  if (!match) return { uid: null, transient: false };
   const idToken = match[1];
 
-  try {
-    const res = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${env.FIREBASE_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken })
-      }
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data?.users?.[0]?.localId || null;
-  } catch (e) {
-    return null;
+  const MAX_TRIES = 3;
+  for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+    let res = null;
+    try {
+      res = await fetch(
+        `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${env.FIREBASE_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken })
+        }
+      );
+    } catch (e) {
+      res = null; // erro de rede: trata como temporário e tenta de novo
+    }
+    if (res && res.ok) {
+      const data = await res.json().catch(() => null);
+      return { uid: data?.users?.[0]?.localId || null, transient: false };
+    }
+    // 400 = o Google analisou o token e ele é realmente inválido/expirado;
+    // repetir não muda o resultado.
+    if (res && res.status === 400) return { uid: null, transient: false };
+    if (attempt < MAX_TRIES) {
+      await new Promise((r) => setTimeout(r, attempt * 400));
+    }
   }
+  return { uid: null, transient: true };
 }
 
 export async function onRequestPost(context) {
   const { request, env } = context;
   try {
     // 0. Autenticação — bloqueia qualquer chamada sem usuário logado válido
-    const uid = await verifyFirebaseToken(request, env);
-    if (!uid) {
+    const auth = await verifyFirebaseToken(request, env);
+    if (!auth.uid) {
+      if (auth.transient) {
+        // Falha temporária ao validar (não é culpa do usuário): 503 com
+        // mensagem amigável, em vez de um 401 enganoso de "Não autenticado".
+        return new Response(
+          JSON.stringify({ error: 'Não consegui validar sua sessão agora. Tente novamente em instantes.', overloaded: true }),
+          { status: 503, headers: CORS }
+        );
+      }
       return new Response(JSON.stringify({ error: 'Não autenticado.' }), { status: 401, headers: CORS });
     }
 
