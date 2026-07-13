@@ -71,7 +71,9 @@ export async function onRequestPost(context) {
     const payload = await request.json();
 
     const event = extractEvent(payload);
-    const email = extractEmail(payload);
+    // E-mail normalizado (minúsculas, sem espaços): é a chave usada tanto no
+    // lookup do Firebase quanto no documento pending_premium/{email}.
+    const email = (extractEmail(payload) || '').trim().toLowerCase();
 
     // Log só do essencial (sem o payload inteiro, pra não vazar dado de comprador no log)
     console.log(`Webhook recebido — evento: "${event}", e-mail presente: ${!!email}`);
@@ -96,8 +98,13 @@ export async function onRequestPost(context) {
     // 4. Busca o UID do usuário pelo email no Firebase Auth REST API
     const uid = await getUidByEmail(email, env);
     if (!uid) {
-      console.warn(`Usuário não encontrado no Firebase: ${email}`);
-      return new Response(JSON.stringify({ ok: true, action: 'user_not_found', email }), { status: 200, headers: CORS });
+      // Compra (ou reembolso) ANTES do cadastro no app: sem isto, a informação
+      // era descartada e o premium ficava perdido para sempre. Agora fica
+      // guardada em pending_premium/{email} e é resgatada pelo endpoint
+      // /api/premium-pendente no primeiro login do usuário com esse e-mail.
+      await setPendingPremiumAdmin(email, premiumValue, event, env);
+      console.warn(`Usuário não encontrado no Firebase: ${email} — premium pendente gravado (${premiumValue})`);
+      return new Response(JSON.stringify({ ok: true, action: 'pending_saved', premium: premiumValue, email }), { status: 200, headers: CORS });
     }
 
     // 5. Atualiza o campo premium no Firestore usando credencial de SERVIÇO
@@ -229,6 +236,43 @@ async function setPremiumFirestoreAdmin(uid, value, env) {
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Firestore error: ${res.status} — ${err}`);
+  }
+  return res.json();
+}
+
+// ── Grava o premium pendente para um e-mail que ainda não tem conta ──────────
+// Documento pending_premium/{email}: consumido por /api/premium-pendente
+// quando o usuário criar a conta com esse e-mail e fizer login.
+// Também grava premium=false (reembolso/chargeback antes do cadastro),
+// sobrescrevendo um pendente anterior — senão um reembolso pré-cadastro
+// ainda daria premium.
+async function setPendingPremiumAdmin(email, value, event, env) {
+  const accessToken = await getGoogleAccessToken(env);
+  const project = env.FIREBASE_PROJECT_ID;
+  const mask = ['email', 'premium', 'event', 'updatedAt']
+    .map((f) => 'updateMask.fieldPaths=' + f).join('&');
+  const url = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents/pending_premium/${encodeURIComponent(email)}?${mask}`;
+  const body = {
+    fields: {
+      email: { stringValue: email },
+      premium: { booleanValue: value },
+      event: { stringValue: event },
+      updatedAt: { timestampValue: new Date().toISOString() }
+    }
+  };
+
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + accessToken
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Firestore error (pending_premium): ${res.status} — ${err}`);
   }
   return res.json();
 }
