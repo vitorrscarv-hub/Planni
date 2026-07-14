@@ -160,12 +160,13 @@ function base64UrlEncode(input) {
 
 // ── Converte a chave privada PEM em ArrayBuffer (formato PKCS8) ──────────────
 function pemToArrayBuffer(pem) {
-  const b64 = pem
-    .replace(/-----BEGIN PRIVATE KEY-----/, '')
-    .replace(/-----END PRIVATE KEY-----/, '')
-    .replace(/\r/g, '')
-    .replace(/\n/g, '')
-    .trim();
+  // Tolerante a colagens imperfeitas do secret no Cloudflare (aspas, barras
+  // soltas, espaços, quebras): remove os marcadores BEGIN/END, mantém apenas
+  // o alfabeto base64 do miolo e refaz o padding final.
+  let b64 = pem
+    .replace(/-----[^-]*-----/g, '')
+    .replace(/[^A-Za-z0-9+/]/g, '');
+  while (b64.length % 4) b64 += '=';
   const binary = atob(b64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
