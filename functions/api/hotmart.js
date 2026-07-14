@@ -177,7 +177,9 @@ function pemToArrayBuffer(pem) {
 // Esse token, ao contrário da Web API Key, é tratado pelo Firestore como
 // acesso administrativo e IGNORA as regras de segurança — igual ao Admin SDK.
 async function getGoogleAccessToken(env) {
-  const clientEmail = env.FIREBASE_CLIENT_EMAIL;
+  // .trim() em tudo que vem de variável de ambiente: espaço/quebra
+  // sobrando no paste do painel não pode derrubar a autenticação.
+  const clientEmail = (env.FIREBASE_CLIENT_EMAIL || '').trim();
   const privateKeyPem = (env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
   if (!clientEmail || !privateKeyPem) {
     throw new Error('FIREBASE_CLIENT_EMAIL ou FIREBASE_PRIVATE_KEY não configuradas.');
@@ -229,7 +231,7 @@ async function getGoogleAccessToken(env) {
 // ── Atualiza o campo premium no Firestore com credencial de serviço ──────────
 async function setPremiumFirestoreAdmin(uid, value, env) {
   const accessToken = await getGoogleAccessToken(env);
-  const project = env.FIREBASE_PROJECT_ID;
+  const project = (env.FIREBASE_PROJECT_ID || '').trim();
   const url = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=premium`;
   const body = { fields: { premium: { booleanValue: value } } };
 
@@ -257,7 +259,7 @@ async function setPremiumFirestoreAdmin(uid, value, env) {
 // ainda daria premium.
 async function setPendingPremiumAdmin(email, value, event, env) {
   const accessToken = await getGoogleAccessToken(env);
-  const project = env.FIREBASE_PROJECT_ID;
+  const project = (env.FIREBASE_PROJECT_ID || '').trim();
   const mask = ['email', 'premium', 'event', 'updatedAt']
     .map((f) => 'updateMask.fieldPaths=' + f).join('&');
   const url = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents/pending_premium/${encodeURIComponent(email)}?${mask}`;

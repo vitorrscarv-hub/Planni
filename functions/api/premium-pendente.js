@@ -105,7 +105,7 @@ export async function onRequestPost(context) {
     }
 
     const accessToken = await getGoogleAccessToken(env);
-    const project = env.FIREBASE_PROJECT_ID;
+    const project = (env.FIREBASE_PROJECT_ID || '').trim();
     const base = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents`;
     const pendingUrl = `${base}/pending_premium/${encodeURIComponent(user.email)}`;
 
@@ -209,7 +209,9 @@ function pemToArrayBuffer(pem) {
 }
 
 async function getGoogleAccessToken(env) {
-  const clientEmail = env.FIREBASE_CLIENT_EMAIL;
+  // .trim() em tudo que vem de variável de ambiente: espaço/quebra
+  // sobrando no paste do painel não pode derrubar a autenticação.
+  const clientEmail = (env.FIREBASE_CLIENT_EMAIL || '').trim();
   const privateKeyPem = (env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
   if (!clientEmail || !privateKeyPem) {
     throw new Error('FIREBASE_CLIENT_EMAIL ou FIREBASE_PRIVATE_KEY não configuradas.');
