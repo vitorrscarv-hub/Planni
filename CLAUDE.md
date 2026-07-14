@@ -70,3 +70,8 @@ onde este arquivo estiver presente na raiz do repositório.
 - Direto ao ponto, sem enrolação.
 - Sempre dizer claramente: subiu ou não subiu, o que quebrou (se
   quebrou), e qual é o próximo passo sugerido.
+- Quando eu precisar colar um valor em algum painel (variável de
+  ambiente, secret, campo de configuração), envie o valor exato e
+  completo num bloco de código — um bloco por valor, com o nome do
+  campo antes — pronto para copiar pelo botão do bloco. Nada de
+  valores parciais ou "adapte aqui".
