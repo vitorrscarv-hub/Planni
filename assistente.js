@@ -451,3 +451,212 @@ async function aiChatSend(){
     _aiAddBubble('Ops, não consegui responder agora. Verifique sua conexão e tente novamente.','ai-bot');
   }
 }
+
+// Incremento B: criação/transação e desambiguação/chips.
+
+function _tryLocalTransaction(msg){
+  var cmd = msg.toLowerCase();
+
+  // Despesa: gastei/paguei/comprei/pix/ted... <valor> <descricao>
+  var saidaM = cmd.match(/(?:gastei|paguei|comprei|passei|cartão|cartao|pix de?|ted de?|transferi|enviei|mandei|debitou|cobrou|saiu|gastar)\s+(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais?)?\s*(?:com|de|no|na|em|pra|para)?\s*(.*)?/);
+  if(saidaM){
+    var val = parseFloat(saidaM[1].replace(/\./g,'').replace(',','.'));
+    if(!isNaN(val) && val>0){
+      var descRaw = (saidaM[2]||'').trim();
+      // Remove palavras de tempo que sobram no fim ("hoje", "ontem", "agora")
+      descRaw = descRaw.replace(/\b(hoje|ontem|agora|de manhã|de manha|à tarde|a tarde|à noite|a noite)\b/gi,'').replace(/\s{2,}/g,' ').trim();
+      var cat = /pix|ted|transferi|enviei/.test(cmd) ? 'pix' : detectCat(cmd+' '+descRaw);
+      var descFinal = descRaw ? descRaw.charAt(0).toUpperCase()+descRaw.slice(1) : 'Despesa';
+      state.transactions.unshift({id:uid(),desc:descFinal,val:val,type:'out',cat:cat,date:today()});
+      save(); renderFinance(); updateHome();
+      _aiAddBubble('✓ Registrei R$'+fm(val)+' em '+getCatInfo(cat).label+' ('+descFinal+').','ai-bot');
+      return true;
+    }
+  }
+
+  // Despesa com valor por extenso: "comprei um biscoito de seis reais"
+  var saidaExt = cmd.match(/(?:gastei|paguei|comprei|custou|saiu)\s+(.*?)\s+(?:de|por|a)\s+([a-zãçéêíóôú\s]+?)\s+reais?/);
+  if(saidaExt){
+    var valExt = _palavraParaNumero(saidaExt[2]);
+    if(valExt && valExt>0){
+      var d = (saidaExt[1]||'').replace(/\b(um|uma|uns|umas|o|a|os|as)\b/gi,'').replace(/\s{2,}/g,' ').trim();
+      var catExt = detectCat(cmd+' '+d);
+      var descE = d ? d.charAt(0).toUpperCase()+d.slice(1) : 'Despesa';
+      state.transactions.unshift({id:uid(),desc:descE,val:valExt,type:'out',cat:catExt,date:today()});
+      save(); renderFinance(); updateHome();
+      _aiAddBubble('✓ Registrei R$'+fm(valExt)+' em '+getCatInfo(catExt).label+' ('+descE+').','ai-bot');
+      return true;
+    }
+  }
+
+  // Despesa com valor por extenso em qualquer posicao: "gastei seis reais com biscoito" / "comprei um biscoito de seis reais"
+  if(/(?:gastei|paguei|comprei|custou|saiu|gastar)/.test(cmd) && /reais?/.test(cmd)){
+    // procura "<numero por extenso> reais"
+    var extMatch = cmd.match(/((?:zero|um|uma|dois|duas|tr[êe]s|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|treze|quatorze|catorze|quinze|dezesseis|dezessete|dezoito|dezenove|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|cem|cento|duzentos|trezentos|quatrocentos|quinhentos|mil)(?:\s+e\s+\w+)*)\s+reais?/);
+    if(extMatch){
+      var valExt2 = _palavraParaNumero(extMatch[1]);
+      if(valExt2 && valExt2>0){
+        // descricao = o que vem depois de "com/de/no/na/em" OU o que sobra
+        var descX = '';
+        var dm = cmd.match(/(?:com|de|no|na|em|pra|para)\s+([a-zãàáâçéêíóôõú\s]+?)(?:\s+(?:reais?|hoje|ontem|agora)|$)/);
+        if(dm) descX = dm[1].trim();
+        descX = descX.replace(extMatch[1],'').replace(/\b(um|uma|uns|umas|o|a|os|as|de|com|reais?)\b/gi,'').replace(/\s{2,}/g,' ').trim();
+        var catX = detectCat(cmd);
+        var descFin = descX ? descX.charAt(0).toUpperCase()+descX.slice(1) : 'Despesa';
+        state.transactions.unshift({id:uid(),desc:descFin,val:valExt2,type:'out',cat:catX,date:today()});
+        save(); renderFinance(); updateHome();
+        _aiAddBubble('✓ Registrei R$'+fm(valExt2)+' em '+getCatInfo(catX).label+' ('+descFin+').','ai-bot');
+        return true;
+      }
+    }
+  }
+
+  // Receita: recebi/ganhei/salario/entrou... <valor>
+  var entM = cmd.match(/(?:recebi|salário de?|salario de?|ganhei|entrou|depositou|caiu)\s+(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais?)?\s*(?:de|do|da)?\s*(.*)?/);
+  if(entM){
+    var val2 = parseFloat(entM[1].replace(/\./g,'').replace(',','.'));
+    if(!isNaN(val2) && val2>0){
+      var d2 = (entM[2]||'').trim();
+      var ehSalario = /salário|salario/.test(cmd);
+      var desc2 = ehSalario ? 'Salário' : (d2 ? d2.charAt(0).toUpperCase()+d2.slice(1) : 'Receita');
+      var cat2 = ehSalario ? 'salario' : 'outros';
+      state.transactions.unshift({id:uid(),desc:desc2,val:val2,type:'in',cat:cat2,date:today()});
+      save(); renderFinance(); updateHome();
+      _aiAddBubble('✓ Registrei entrada de R$'+fm(val2)+' ('+desc2+').','ai-bot');
+      return true;
+    }
+  }
+
+  return false;
+}
+function _tryLocalCreate(msg){
+  var cmd = msg.toLowerCase();
+
+  // ----- TAREFA: "crie uma tarefa [com o nome de] X" -----
+  var tarM = cmd.match(/(?:crie|criar|adicione|adicionar|nova|novo|faz|fazer|bota|colar?)\s+(?:uma?\s+)?tarefa(?:\s+(?:com o nome de|chamada|de|:|para|pra))?\s*(.*)/);
+  if(tarM){
+    var txt = (tarM[1]||'').trim();
+    // pega o texto original (preserva acentos/maiusculas) a partir da posicao
+    var origMatch = msg.match(/tarefa(?:\s+(?:com o nome de|chamada|de|:|para|pra))?\s*(.*)/i);
+    if(origMatch && origMatch[1]) txt = origMatch[1].trim();
+    if(txt){
+      if(!isPremium){
+        var ativas = state.tasks.filter(function(t){ return !t.done; });
+        if(ativas.length >= (typeof PREMIUM_TASK_LIMIT!=='undefined'?PREMIUM_TASK_LIMIT:10)){
+          return 'Você atingiu o limite de tarefas do plano gratuito. Considere o Premium para tarefas ilimitadas.';
+        }
+      }
+      var urgente = /urgente/.test(cmd);
+      var importante = /importante/.test(cmd) || !urgente;
+      state.tasks.unshift({ id:uid(), text:txt.charAt(0).toUpperCase()+txt.slice(1), done:false, importante:importante, urgente:urgente });
+      save(); renderTasks(); updateHome();
+      return '✓ Criei a tarefa "'+txt+'".';
+    }
+  }
+
+  // ----- NOTA: "adicione uma nota [:] X" -----
+  var notaM = cmd.match(/(?:crie|criar|adicione|adicionar|nova|novo|anote|anotar|escreva)\s+(?:uma?\s+)?nota(?:\s*(?::|com o nome de|chamada|de|sobre))?\s*(.*)/);
+  if(notaM){
+    var origN = msg.match(/nota(?:\s*(?::|com o nome de|chamada|de|sobre))?\s*(.*)/i);
+    var conteudo = (origN && origN[1]) ? origN[1].trim() : (notaM[1]||'').trim();
+    if(conteudo){
+      var titulo = conteudo.length>40 ? conteudo.slice(0,40)+'…' : conteudo;
+      state.notes.unshift({ id:uid(), title:titulo.charAt(0).toUpperCase()+titulo.slice(1), body:'', date:new Date().toISOString(), folderId:null });
+      save(); if(typeof renderNotes==='function') renderNotes(); updateHome();
+      return '✓ Criei a nota "'+titulo+'".';
+    }
+  }
+
+  // ----- EVENTO: "crie um evento X amanha as 15h" / "reuniao hoje as 9h" -----
+  var evtM = cmd.match(/(?:crie|criar|adicione|adicionar|agende|agendar|marque|marcar)\s+(?:um\s+)?(?:evento|compromisso|reuni[ãa]o)\s+(.*?)\s+(?:às|as|para as|pra)\s+(\d{1,2})(?:[:h](\d{2}))?/);
+  if(evtM){
+    var origE = msg.match(/(?:evento|compromisso|reuni[ãa]o)\s+(.*?)\s+(?:às|as|para as|pra)\s+\d/i);
+    var titEv = (origE && origE[1]) ? origE[1].trim() : (evtM[1]||'Evento').trim();
+    // Remove palavras de tempo que vazam para o titulo (sem \b por causa dos acentos)
+    titEv = titEv.replace(/(^|\s)(amanhã|amanha|hoje|depois de amanhã|depois de amanha|de manhã|de manha|à tarde|a tarde|à noite|a noite)(\s|$)/gi,' ').replace(/\s{2,}/g,' ').trim();
+    if(!titEv) titEv = 'Evento';
+    var hh = evtM[2].padStart(2,'0');
+    var mm = (evtM[3]||'00').padStart(2,'0');
+    var dEv = new Date();
+    if(/amanhã|amanha/.test(cmd)) dEv.setDate(dEv.getDate()+1);
+    if(/depois de amanhã|depois de amanha/.test(cmd)) dEv.setDate(dEv.getDate()+2);
+    state.events.push({ id:uid(), title:titEv.charAt(0).toUpperCase()+titEv.slice(1), date:dEv.toISOString().slice(0,10), time:hh+':'+mm, color:'#2d6c97', remind:15 });
+    save(); if(typeof renderEvents==='function') renderEvents(); updateHome();
+    var quando = /amanhã|amanha/.test(cmd) ? 'amanhã' : 'hoje';
+    return '✓ Agendei "'+titEv+'" para '+quando+' às '+hh+':'+mm+'.';
+  }
+
+  return null;
+}
+function _chipPergunta(texto){
+  var input=document.getElementById('ai-chat-input');
+  if(input){ input.value=texto; _updateChatBtn(); }
+  aiChatSend();
+}
+function _localReplyComChips(texto, chips){
+  var typing=_aiAddBubble('digitando...','ai-typing');
+  setTimeout(function(){
+    if(typing) typing.remove();
+    var bubble=_aiAddBubble(texto,'ai-bot');
+    if(bubble){
+      var wrap=document.createElement('div');
+      wrap.style.cssText='display:flex;flex-wrap:wrap;gap:6px;margin-top:10px';
+      chips.forEach(function(c){
+        var b=document.createElement('button');
+        b.textContent=c.label;
+        b.style.cssText='border:1px solid var(--sky);background:var(--sky-xl);color:var(--sky);font-size:12px;font-weight:700;padding:7px 12px;border-radius:100px;cursor:pointer';
+        b.onclick=function(){ if(c.acao){ c.acao(); } else { _chipPergunta(c.pergunta); } };
+        wrap.appendChild(b);
+      });
+      bubble.appendChild(wrap);
+    }
+  }, 500);
+}
+function _tryDesambiguar(msg){
+  var c=msg.toLowerCase().trim();
+  // já tem período ou termo específico? então não é vago
+  var temPeriodo=/m[êe]s|ano|semana|hoje|ontem|dias|janeiro|fevereiro|mar[çc]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro/.test(c);
+
+  // "meus gastos" / "gastos" / "quanto gastei" (sem período nem categoria)
+  if(/^(meus\s+)?gastos?$/.test(c) || (/gast(ei|os|o)\b/.test(c) && c.split(/\s+/).length<=2 && !temPeriodo)){
+    _localReplyComChips('De qual período você quer ver seus gastos?', [
+      {label:'📅 Esse mês', pergunta:'quanto gastei esse mês'},
+      {label:'📅 Mês passado', pergunta:'quanto gastei mês passado'},
+      {label:'📅 Esse ano', pergunta:'quanto gastei esse ano'},
+      {label:'🔝 Maiores despesas', pergunta:'quais minhas maiores despesas esse mês'}
+    ]);
+    return true;
+  }
+
+  // "investimento" / "investir" / "aplicar" (vago)
+  if(/^(investimentos?|investir|aplicar|renda fixa)$/.test(c)){
+    _localReplyComChips('O que você quer fazer com investimentos?', [
+      {label:'⚖️ Comparar CDB e LCI', pergunta:'compara CDB 110% com LCI 95% por 2 anos'},
+      {label:'💰 Simular carteira', acao:function(){ abrirCalcInv('lucro'); }},
+      {label:'📊 Equivalência', pergunta:'quanto rende uma LCI de 95%'}
+    ]);
+    return true;
+  }
+
+  // "resumo" / "como estou" (vago)
+  if(/^(resumo|como\s+estou|situa[çc][ãa]o|balan[çc]o)$/.test(c)){
+    _localReplyComChips('Quer ver o resumo de qual período?', [
+      {label:'📊 Esse mês', pergunta:'como está minha vida financeira esse mês'},
+      {label:'📊 Mês passado', pergunta:'resumo mês passado'},
+      {label:'📊 Esse ano', pergunta:'resumo esse ano'}
+    ]);
+    return true;
+  }
+
+  // "criar" / "adicionar" (sem dizer o quê)
+  if(/^(criar|adicionar|nova|novo|adiciona|cria)$/.test(c)){
+    _localReplyComChips('O que você quer criar?', [
+      {label:'✓ Uma tarefa', pergunta:'cria uma tarefa'},
+      {label:'📝 Uma nota', pergunta:'cria uma nota'},
+      {label:'📅 Um evento', pergunta:'cria um evento'}
+    ]);
+    return true;
+  }
+
+  return false;
+}
