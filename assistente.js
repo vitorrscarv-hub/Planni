@@ -458,7 +458,7 @@ function _tryLocalTransaction(msg){
   var cmd = msg.toLowerCase();
 
   // Despesa: gastei/paguei/comprei/pix/ted... <valor> <descricao>
-  var saidaM = cmd.match(/(?:gastei|paguei|comprei|passei|cartão|cartao|pix de?|ted de?|transferi|enviei|mandei|debitou|cobrou|saiu|gastar)\s+(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais?)?\s*(?:com|de|no|na|em|pra|para)?\s*(.*)?/);
+  var saidaM = cmd.match(/(?:gastei|paguei|comprei|passei|cartão|cartao|pix de?|ted de?|transferi|enviei|mandei|debitou|cobrou|saiu|gastar)\s+(?:r\$\s*)?(\d+(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:,\d{1,2})?)\s*(?:reais?)?\s*(?:com|de|no|na|em|pra|para)?\s*(.*)?/);
   if(saidaM){
     var val = parseFloat(saidaM[1].replace(/\./g,'').replace(',','.'));
     if(!isNaN(val) && val>0){
@@ -512,7 +512,7 @@ function _tryLocalTransaction(msg){
   }
 
   // Receita: recebi/ganhei/salario/entrou... <valor>
-  var entM = cmd.match(/(?:recebi|salário de?|salario de?|ganhei|entrou|depositou|caiu)\s+(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais?)?\s*(?:de|do|da)?\s*(.*)?/);
+  var entM = cmd.match(/(?:recebi|salário de?|salario de?|ganhei|entrou|depositou|caiu)\s+(?:r\$\s*)?(\d+(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:,\d{1,2})?)\s*(?:reais?)?\s*(?:de|do|da)?\s*(.*)?/);
   if(entM){
     var val2 = parseFloat(entM[1].replace(/\./g,'').replace(',','.'));
     if(!isNaN(val2) && val2>0){
