@@ -1103,6 +1103,11 @@ function _assistFlowTry(msg){
     _assistFlowIniciarNota();
     return true;
   }
+  var pasta = _matchInicioPasta(msg);
+  if(pasta){
+    _assistFlowIniciarPasta(pasta.nome);
+    return true;
+  }
   return false;
 }
 
@@ -1155,21 +1160,60 @@ function _assistFlowProcessar(msg){
     if(_assistFlow.etapa==='nova_pasta'){ _assistFlowCriarPasta(texto); return; }
     if(_assistFlow.etapa==='conteudo'){ _assistFlowCriarNota(texto); return; }
   }
+  if(_assistFlow.tipo==='pasta'){
+    if(_assistFlow.etapa==='nome'){ _assistFlowFinalizarPasta(texto); return; }
+  }
 }
 
-function _assistFlowCriarPasta(nome){
-  if(!nome){ _localReply('Preciso de um nome para a pasta. Qual vai ser?'); return; }
+// Helper compartilhado: cria a pasta (ou reaproveita se já existir, sem duplicar).
+// Retorna { folder, novo }. Estrutura idêntica à da UI: {id, name, color}.
+function _criarPasta(nome){
   if(typeof _ensureFolders==='function') _ensureFolders();
+  var existe = (state.noteFolders||[]).filter(function(f){ return f.name.toLowerCase()===nome.toLowerCase(); })[0];
+  if(existe) return { folder:existe, novo:false };
   var cor = (typeof FOLDER_COLORS!=='undefined' && FOLDER_COLORS.length)
     ? FOLDER_COLORS[state.noteFolders.length % FOLDER_COLORS.length] : '#2d7dd2';
-  var id = uid();
-  state.noteFolders.push({ id:id, name:nome, color:cor });
+  var f = { id:uid(), name:nome, color:cor };
+  state.noteFolders.push(f);
   save();
   if(typeof renderNotes==='function') renderNotes();
-  _assistFlow.dados.folderId = id;
-  _assistFlow.dados.folderName = nome;
+  return { folder:f, novo:true };
+}
+
+// Passo do fluxo de NOTA: cria/reusa a pasta e segue para o conteúdo.
+function _assistFlowCriarPasta(nome){
+  if(!nome){ _localReply('Preciso de um nome para a pasta. Qual vai ser?'); return; }
+  var r = _criarPasta(nome);
+  _assistFlow.dados.folderId = r.folder.id;
+  _assistFlow.dados.folderName = r.folder.name;
   _assistFlow.etapa = 'conteudo';
-  _localReply('✓ Criei a pasta "'+nome+'". Agora, qual o conteúdo da nota?');
+  _localReply((r.novo ? '✓ Criei a pasta "'+r.folder.name+'".' : 'Essa pasta já existe, vou usar ela.')+' Agora, qual o conteúdo da nota?');
+}
+
+// ── PASTA (standalone): "cria uma pasta [nome]" ──
+function _matchInicioPasta(msg){
+  var cmd = (msg||'').toLowerCase().trim();
+  var m = cmd.match(/^(?:cria(?:r)?|adiciona(?:r)?|nova|novo|quero\s+(?:criar|fazer)|faz(?:er)?|bota(?:r)?)\s+(?:uma?\s+)?pasta\b\s*(.*)$/);
+  if(!m) return null;
+  // nome inline (preserva acentos/maiúsculas a partir da msg original)
+  var orig = msg.match(/pasta\b\s*(?:chamada\s+|com o nome de\s+|de\s+|:\s*)?(.*)$/i);
+  var nome = (orig && orig[1]) ? orig[1].trim() : '';
+  nome = nome.replace(/^(chamada|com o nome de|de|:)\s+/i,'').replace(/\b(por favor|pra mim|pfv|agora|nova)\b/gi,'').trim();
+  return { nome: nome };
+}
+
+function _assistFlowIniciarPasta(nomeInline){
+  if(nomeInline){ _assistFlowFinalizarPasta(nomeInline); return; }
+  _assistFlow = { ativo:true, tipo:'pasta', etapa:'nome', dados:{} };
+  _localReply('Qual o nome da nova pasta?');
+}
+
+function _assistFlowFinalizarPasta(nome){
+  if(!nome){ _localReply('Me diz o nome da pasta.'); return; }
+  var r = _criarPasta(nome);
+  _assistFlowReset();
+  if(r.novo) _localReply('Pronto! Criei a pasta "'+r.folder.name+'". 📁');
+  else _localReply('A pasta "'+r.folder.name+'" já existe. 👍');
 }
 
 function _assistFlowCriarNota(conteudo){
