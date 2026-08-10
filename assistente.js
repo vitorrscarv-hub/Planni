@@ -364,6 +364,15 @@ async function aiChatSend(){
   _updateChatBtn();
   _aiAddBubble(msg,'ai-user');
 
+  // FLUXO GUIADO (conversa com estado): tem prioridade ABSOLUTA. Se um fluxo de
+  // criação está ativo, ou o usuário está iniciando um, a mensagem é tratada aqui
+  // e NÃO passa pelas outras funções locais nem pela IA (tudo local, sem cota).
+  if(_assistFlowTry(msg)){
+    _aiChatHistory.push({role:'user',text:msg});
+    _aiChatHistory.push({role:'model',text:'(fluxo guiado do assistente)'});
+    return;
+  }
+
   // CALCULADORA LOCAL: perguntas de gasto/saldo respondidas pelo proprio app, sem IA
   var localAns = _tryLocalQuery(msg);
   if(localAns){
@@ -1058,4 +1067,122 @@ function _stopChatVoice(autoSend){
   } else if(input){
     input.focus();
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FLUXO GUIADO DE CRIAÇÃO (conversa com estado) — Incremento 1: NOTA
+// Tudo local e determinístico, sem IA. Reaproveita state, save, uid,
+// _ensureFolders, FOLDER_COLORS, _localReply, _localReplyComChips, renderNotes.
+// ═══════════════════════════════════════════════════════════════════════════
+var _assistFlow = { ativo:false, tipo:null, etapa:null, dados:{} };
+
+function _assistFlowReset(){
+  _assistFlow = { ativo:false, tipo:null, etapa:null, dados:{} };
+}
+
+// Cancelamento em qualquer etapa: "cancelar", "deixa", "para", "esquece"...
+function _ehCancelamento(msg){
+  return /^(cancela(?:r)?|deixa(?:\s+pra\s+l[áa])?|para|parar|esquece|esque[çc]a|desisto|sai|n[ãa]o\s+quero)\b/i.test((msg||'').trim());
+}
+
+// Ponto de entrada, chamado no TOPO do aiChatSend.
+// Retorna true se tratou a mensagem (fluxo ativo ou recém-iniciado).
+function _assistFlowTry(msg){
+  if(_assistFlow.ativo){
+    if(_ehCancelamento(msg)){
+      var t = _assistFlow.tipo;
+      _assistFlowReset();
+      _localReply('Ok, cancelei'+(t?' a criação de '+t:'')+'. Quando quiser, é só pedir. 👍');
+      return true;
+    }
+    _assistFlowProcessar(msg);
+    return true;
+  }
+  // Início GUIADO só quando NÃO veio conteúdo inline (senão _tryLocalCreate cuida).
+  if(_ehInicioNotaGuiada(msg)){
+    _assistFlowIniciarNota();
+    return true;
+  }
+  return false;
+}
+
+// "cria uma nota", "nova nota", "quero criar uma nota" — sem conteúdo depois.
+function _ehInicioNotaGuiada(msg){
+  var cmd = (msg||'').toLowerCase().trim();
+  var m = cmd.match(/^(?:cria(?:r)?|adiciona(?:r)?|nova|novo|quero\s+(?:criar|fazer)|faz(?:er)?|bota(?:r)?|anota(?:r)?)\s+(?:uma?\s+)?nota\b\s*(.*)$/);
+  if(!m) return false;
+  var resto = (m[1]||'').replace(/^[:\-\s]+/,'').replace(/\b(por favor|pra mim|pfv|agora)\b/gi,'').trim();
+  return resto.length === 0;
+}
+
+function _assistFlowIniciarNota(){
+  _assistFlow = { ativo:true, tipo:'nota', etapa:'pasta', dados:{} };
+  if(typeof _ensureFolders==='function') _ensureFolders();
+  var folders = (state.noteFolders||[]).slice();
+  var chips = folders.map(function(f){
+    return { label:'📁 '+f.name, acao:function(){ _assistFlowNotaPasta(f.id, f.name); } };
+  });
+  chips.push({ label:'➕ Nova pasta', acao:function(){ _assistFlowNotaNovaPastaPergunta(); } });
+  _localReplyComChips('Vou criar uma nota. Em qual pasta?', chips);
+}
+
+function _assistFlowNotaPasta(folderId, folderName){
+  if(!_assistFlow.ativo || _assistFlow.tipo!=='nota') return;
+  _assistFlow.dados.folderId = folderId;
+  _assistFlow.dados.folderName = folderName;
+  _assistFlow.etapa = 'conteudo';
+  _localReply('Boa. Qual o conteúdo da nota?');
+}
+
+function _assistFlowNotaNovaPastaPergunta(){
+  if(!_assistFlow.ativo || _assistFlow.tipo!=='nota') return;
+  _assistFlow.etapa = 'nova_pasta';
+  _localReply('Qual o nome da nova pasta?');
+}
+
+// Roteia uma RESPOSTA de texto conforme a etapa atual do fluxo.
+function _assistFlowProcessar(msg){
+  var texto = (msg||'').trim();
+  if(_assistFlow.tipo==='nota'){
+    if(_assistFlow.etapa==='pasta'){
+      var alvo = texto.toLowerCase();
+      if(/^(nova|nova\s+pasta|outra|cria(?:r)?\s+pasta)$/.test(alvo)){ _assistFlowNotaNovaPastaPergunta(); return; }
+      var achou = (state.noteFolders||[]).filter(function(f){ return f.name.toLowerCase()===alvo; })[0];
+      if(achou){ _assistFlowNotaPasta(achou.id, achou.name); }
+      else { _assistFlowCriarPasta(texto); } // digitou um nome novo direto
+      return;
+    }
+    if(_assistFlow.etapa==='nova_pasta'){ _assistFlowCriarPasta(texto); return; }
+    if(_assistFlow.etapa==='conteudo'){ _assistFlowCriarNota(texto); return; }
+  }
+}
+
+function _assistFlowCriarPasta(nome){
+  if(!nome){ _localReply('Preciso de um nome para a pasta. Qual vai ser?'); return; }
+  if(typeof _ensureFolders==='function') _ensureFolders();
+  var cor = (typeof FOLDER_COLORS!=='undefined' && FOLDER_COLORS.length)
+    ? FOLDER_COLORS[state.noteFolders.length % FOLDER_COLORS.length] : '#2d7dd2';
+  var id = uid();
+  state.noteFolders.push({ id:id, name:nome, color:cor });
+  save();
+  if(typeof renderNotes==='function') renderNotes();
+  _assistFlow.dados.folderId = id;
+  _assistFlow.dados.folderName = nome;
+  _assistFlow.etapa = 'conteudo';
+  _localReply('✓ Criei a pasta "'+nome+'". Agora, qual o conteúdo da nota?');
+}
+
+function _assistFlowCriarNota(conteudo){
+  if(!conteudo){ _localReply('Me diz o que escrever na nota.'); return; }
+  var titulo = conteudo.length>50 ? conteudo.slice(0,50)+'…' : conteudo;
+  titulo = titulo.charAt(0).toUpperCase()+titulo.slice(1);
+  var corpo = conteudo.length>50 ? conteudo : '';
+  var folderId = _assistFlow.dados.folderId || 'default';
+  var folderName = _assistFlow.dados.folderName || 'Geral';
+  state.notes.unshift({ id:uid(), title:titulo, body:corpo, date:new Date().toISOString(), folderId:folderId });
+  save();
+  if(typeof renderNotes==='function') renderNotes();
+  if(typeof updateHome==='function') updateHome();
+  _assistFlowReset();
+  _localReply('Pronto! Criei a nota "'+titulo+'" na pasta "'+folderName+'". 📝');
 }
