@@ -1114,7 +1114,7 @@ function _assistFlowTry(msg){
 // "cria uma nota", "nova nota", "quero criar uma nota" — sem conteúdo depois.
 function _ehInicioNotaGuiada(msg){
   var cmd = (msg||'').toLowerCase().trim();
-  var m = cmd.match(/^(?:cria(?:r)?|adiciona(?:r)?|nova|novo|quero\s+(?:criar|fazer)|faz(?:er)?|bota(?:r)?|anota(?:r)?)\s+(?:uma?\s+)?nota\b\s*(.*)$/);
+  var m = cmd.match(/^(?:cri[ae]|criar|adicion[ae]|adicionar|nova|novo|quero\s+(?:criar|fazer|anotar)|faz(?:er)?|bota(?:r)?|anot[ae]|anotar|escrev[ae]|escreva|monta|monte)\s+(?:uma?\s+)?nota\b\s*(.*)$/);
   if(!m) return false;
   var resto = (m[1]||'').replace(/^[:\-\s]+/,'').replace(/\b(por favor|pra mim|pfv|agora)\b/gi,'').trim();
   return resto.length === 0;
@@ -1193,7 +1193,7 @@ function _assistFlowCriarPasta(nome){
 // ── PASTA (standalone): "cria uma pasta [nome]" ──
 function _matchInicioPasta(msg){
   var cmd = (msg||'').toLowerCase().trim();
-  var m = cmd.match(/^(?:cria(?:r)?|adiciona(?:r)?|nova|novo|quero\s+(?:criar|fazer)|faz(?:er)?|bota(?:r)?)\s+(?:uma?\s+)?pasta\b\s*(.*)$/);
+  var m = cmd.match(/^(?:cri[ae]|criar|adicion[ae]|adicionar|nova|novo|quero\s+(?:criar|fazer)|faz(?:er)?|bota(?:r)?|monta|monte)\s+(?:uma?\s+)?pasta\b\s*(.*)$/);
   if(!m) return null;
   // nome inline (preserva acentos/maiúsculas a partir da msg original)
   var orig = msg.match(/pasta\b\s*(?:chamada\s+|com o nome de\s+|de\s+|:\s*)?(.*)$/i);
