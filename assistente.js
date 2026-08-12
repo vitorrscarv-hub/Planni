@@ -1090,9 +1090,10 @@ function _ehCancelamento(msg){
 function _assistFlowTry(msg){
   if(_assistFlow.ativo){
     if(_ehCancelamento(msg)){
+      var rotulos = { nota:'a nota', pasta:'a pasta', tarefa:'a tarefa', evento:'o evento', transacao:'a transação' };
       var t = _assistFlow.tipo;
       _assistFlowReset();
-      _localReply('Ok, cancelei'+(t?' a criação de '+t:'')+'. Quando quiser, é só pedir. 👍');
+      _localReply('Ok, cancelei'+(t?' '+(rotulos[t]||t):'')+'. Quando quiser, é só pedir. 👍');
       return true;
     }
     _assistFlowProcessar(msg);
@@ -1115,6 +1116,11 @@ function _assistFlowTry(msg){
   var evento = _matchInicioEvento(msg);
   if(evento){
     _assistFlowIniciarEvento(evento);
+    return true;
+  }
+  var tx = _matchInicioTransacao(msg);
+  if(tx){
+    _assistFlowIniciarTransacao(tx);
     return true;
   }
   return false;
@@ -1171,6 +1177,34 @@ function _assistFlowProcessar(msg){
   }
   if(_assistFlow.tipo==='pasta'){
     if(_assistFlow.etapa==='nome'){ _assistFlowFinalizarPasta(texto); return; }
+  }
+  if(_assistFlow.tipo==='transacao'){
+    if(_assistFlow.etapa==='tipo'){
+      var tl = texto.toLowerCase();
+      if(/receita|entrada|ganho|recebi|entrou|salário|salario/.test(tl)){ _assistFlowTxSetTipo('in'); }
+      else if(/despesa|gasto|sa[íi]da|paguei|gastei|comprei/.test(tl)){ _assistFlowTxSetTipo('out'); }
+      else { _localReply('É receita ou despesa? Pode tocar num botão.'); }
+      return;
+    }
+    if(_assistFlow.etapa==='valor'){
+      var v = _parseValorBR(texto);
+      if(!v){ _localReply('Não entendi o valor. Tente algo como "89,90" ou "1.500".'); return; }
+      _assistFlow.dados.val = v; _assistFlowTxProximo(); return;
+    }
+    if(_assistFlow.etapa==='categoria'){
+      var cats = (typeof allCats==='function') ? allCats(_assistFlow.dados.tipoTx) : [];
+      var alvo = texto.toLowerCase().trim();
+      var achou = cats.filter(function(c){ return c.label.toLowerCase()===alvo || c.id===alvo; })[0]
+               || (alvo.length>=3 ? cats.filter(function(c){ return c.label.toLowerCase().indexOf(alvo)>=0; })[0] : null);
+      if(achou){ _assistFlowTxSetCat(achou.id, achou.label); }
+      else {
+        var cid = (typeof detectCat==='function') ? detectCat(texto) : 'outros';
+        var ci = (typeof getCatInfo==='function') ? getCatInfo(cid) : { label:'Outros' };
+        _assistFlowTxSetCat(cid, ci.label);
+      }
+      return;
+    }
+    if(_assistFlow.etapa==='descricao'){ _assistFlowCriarTransacao(texto); return; }
   }
   if(_assistFlow.tipo==='evento'){
     if(_assistFlow.etapa==='titulo'){
@@ -1420,4 +1454,71 @@ function _assistFlowCriarEvento(hora){
   if(typeof updateHome==='function') updateHome();
   _assistFlowReset();
   _localReply('Pronto! Agendei "'+title+'" para '+_fmtDataBR(date)+' às '+hora+'. 📅');
+}
+
+// ── TRANSAÇÃO (guiada): receita/despesa → valor → categoria → descrição ──
+// Estrutura idêntica à UI: {id, desc, val, type:'in'/'out', cat, date, recur}.
+// Reusa o parser de valor pt-BR corrigido (ponto=milhar, vírgula=decimal).
+function _parseValorBR(txt){
+  var m = (txt||'').match(/(\d+(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:,\d{1,2})?)/);
+  if(!m) return null;
+  var v = parseFloat(m[1].replace(/\./g,'').replace(',','.'));
+  return (isNaN(v) || v<=0) ? null : v;
+}
+
+// Detecta início de transação guiada. Só dispara com o SUBSTANTIVO
+// (transação/despesa/gasto/receita...), nunca com "gastei/paguei/recebi"
+// (esses continuam no atalho one-shot _tryLocalTransaction).
+function _matchInicioTransacao(msg){
+  var cmd = (msg||'').toLowerCase().trim();
+  var m = cmd.match(/^(?:nov[ao]|cri[ae]|criar|adicion[ae]|adicionar|registr[ae]|registrar|lan[çc][ae]|lançar|quero\s+(?:criar|registrar|lan[çc]ar|adicionar))\s+(?:uma?\s+)?(transa[çc][ãa]o|despesa|gasto|receita|entrada|sa[íi]da|lan[çc]amento|movimenta[çc][ãa]o)\b\s*(.*)$/);
+  if(!m) return null;
+  var noun = m[1];
+  var tipo = /despesa|gasto|sa[íi]da/.test(noun) ? 'out' : (/receita|entrada/.test(noun) ? 'in' : null);
+  return { tipo: tipo, valor: _parseValorBR(m[2]||'') };
+}
+
+function _assistFlowIniciarTransacao(info){
+  _assistFlow = { ativo:true, tipo:'transacao', etapa:null, dados:{} };
+  if(info && info.tipo) _assistFlow.dados.tipoTx = info.tipo;
+  if(info && info.valor) _assistFlow.dados.val = info.valor;
+  _assistFlowTxProximo();
+}
+function _assistFlowTxProximo(){
+  var d = _assistFlow.dados;
+  if(!d.tipoTx){
+    _assistFlow.etapa='tipo';
+    _localReplyComChips('É uma receita ou uma despesa?', [
+      { label:'💸 Despesa', acao:function(){ _assistFlowTxSetTipo('out'); } },
+      { label:'💰 Receita', acao:function(){ _assistFlowTxSetTipo('in'); } }
+    ]);
+    return;
+  }
+  if(!d.val){ _assistFlow.etapa='valor'; _localReply('Qual o valor? (ex: 89,90 ou 1.500)'); return; }
+  if(!d.cat){ _assistFlowTxPergCategoria(); return; }
+  _assistFlow.etapa='descricao'; _localReply('E qual a descrição?');
+}
+function _assistFlowTxSetTipo(t){ _assistFlow.dados.tipoTx = t; _assistFlowTxProximo(); }
+function _assistFlowTxPergCategoria(){
+  _assistFlow.etapa='categoria';
+  var cats = (typeof allCats==='function') ? allCats(_assistFlow.dados.tipoTx) : [];
+  var chips = cats.map(function(c){ return { label:(c.icon?c.icon+' ':'')+c.label, acao:(function(cc){ return function(){ _assistFlowTxSetCat(cc.id, cc.label); }; })(c) }; });
+  if(!chips.length) chips = [{ label:'Outros', acao:function(){ _assistFlowTxSetCat('outros','Outros'); } }];
+  _localReplyComChips('Qual a categoria?', chips);
+}
+function _assistFlowTxSetCat(id, label){ _assistFlow.dados.cat=id; _assistFlow.dados.catLabel=label; _assistFlow.etapa='descricao'; _localReply('E qual a descrição?'); }
+function _assistFlowCriarTransacao(desc){
+  var d = _assistFlow.dados;
+  if(!d.val || !d.tipoTx){ _assistFlowReset(); _localReply('Faltou o valor ou o tipo, pode pedir de novo?'); return; }
+  var descFinal = desc ? desc.charAt(0).toUpperCase()+desc.slice(1) : (d.catLabel || 'Transação');
+  var cat = d.cat || 'outros';
+  var dataHoje = (typeof today==='function') ? today() : new Date().toISOString().slice(0,10);
+  state.transactions.unshift({ id:uid(), desc:descFinal, val:d.val, type:d.tipoTx, cat:cat, date:dataHoje, recur:false });
+  save();
+  if(typeof renderFinance==='function') renderFinance();
+  if(typeof updateHome==='function') updateHome();
+  _assistFlowReset();
+  var tipoLbl = d.tipoTx==='in' ? 'receita' : 'despesa';
+  var valStr = (typeof fm==='function') ? fm(d.val) : String(d.val);
+  _localReply('Pronto! Registrei a '+tipoLbl+' de R$'+valStr+' em '+(d.catLabel||'Outros')+' ('+descFinal+'). ✅');
 }
