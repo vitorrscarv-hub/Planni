@@ -1112,6 +1112,11 @@ function _assistFlowTry(msg){
     _assistFlowIniciarTarefa();
     return true;
   }
+  var evento = _matchInicioEvento(msg);
+  if(evento){
+    _assistFlowIniciarEvento(evento);
+    return true;
+  }
   return false;
 }
 
@@ -1166,6 +1171,26 @@ function _assistFlowProcessar(msg){
   }
   if(_assistFlow.tipo==='pasta'){
     if(_assistFlow.etapa==='nome'){ _assistFlowFinalizarPasta(texto); return; }
+  }
+  if(_assistFlow.tipo==='evento'){
+    if(_assistFlow.etapa==='titulo'){
+      if(!texto){ _localReply('Me diz o nome do evento.'); return; }
+      _assistFlow.dados.title = texto.charAt(0).toUpperCase()+texto.slice(1);
+      if(!_assistFlow.dados.date){ _assistFlowEventoPergData(); } else { _assistFlowEventoPergHora(); }
+      return;
+    }
+    if(_assistFlow.etapa==='data'){
+      var iso = _parseDataNatural(texto);
+      if(!iso){ _localReply('Não entendi a data. Pode dizer como "amanhã", "dia 15", "20/09" ou tocar num botão.'); _assistFlowEventoPergData(); return; }
+      _assistFlowEventoSetData(iso);
+      return;
+    }
+    if(_assistFlow.etapa==='hora'){
+      var hr = _parseHoraNatural(texto);
+      if(!hr){ _localReply('Não entendi o horário. Tente "14h", "14:30" ou "às 9".'); _assistFlowEventoPergHora(); return; }
+      _assistFlowCriarEvento(hr);
+      return;
+    }
   }
   if(_assistFlow.tipo==='tarefa'){
     if(_assistFlow.etapa==='titulo'){ _assistFlowTarefaTitulo(texto); return; }
@@ -1304,4 +1329,95 @@ function _assistFlowCriarTarefa(importante, urgente){
     : urgente ? 'urgente'
     : 'sem prioridade';
   _localReply('Pronto! Criei a tarefa "'+text+'" ('+etiqueta+'). ✅');
+}
+
+// ── EVENTO (guiada): "cria um evento" → título → data → hora ──
+// Estrutura idêntica à UI: {id, title, date:'YYYY-MM-DD', time:'HH:MM', color, remind}.
+// Parsers de data/hora naturais (pt-BR), testados isoladamente.
+function _fmtDataISO(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+var _MESES_PT = {janeiro:1,fevereiro:2,marco:3,'março':3,abril:4,maio:5,junho:6,julho:7,agosto:8,setembro:9,outubro:10,novembro:11,dezembro:12,jan:1,fev:2,mar:3,abr:4,mai:5,jun:6,jul:7,ago:8,set:9,out:10,nov:11,dez:12};
+var _DIASSEM_PT = {domingo:0,'segunda':1,'segunda-feira':1,terca:2,'terça':2,'terca-feira':2,'terça-feira':2,quarta:3,'quarta-feira':3,quinta:4,'quinta-feira':4,sexta:5,'sexta-feira':5,sabado:6,'sábado':6};
+function _parseDataNatural(txt){
+  var t = (txt||'').toLowerCase().trim();
+  var hoje = new Date(); hoje.setHours(12,0,0,0);
+  if(/\bhoje\b/.test(t)) return _fmtDataISO(hoje);
+  if(/depois de amanh[ãa]/.test(t)){ var d=new Date(hoje); d.setDate(d.getDate()+2); return _fmtDataISO(d); }
+  if(/amanh[ãa]/.test(t)){ var d2=new Date(hoje); d2.setDate(d2.getDate()+1); return _fmtDataISO(d2); }
+  var m = t.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+  if(m){ var dd=+m[1], mo=+m[2], yy=m[3]?(+m[3]<100?2000+ +m[3]:+m[3]):hoje.getFullYear();
+    if(dd>=1&&dd<=31&&mo>=1&&mo<=12) return _fmtDataISO(new Date(yy,mo-1,dd,12,0,0)); }
+  var m2 = t.match(/\b(\d{1,2})\s+de\s+([a-zç]+)/);
+  if(m2 && _MESES_PT[m2[2]]){ var dd2=+m2[1], mo2=_MESES_PT[m2[2]]; if(dd2>=1&&dd2<=31){ var dt2=new Date(hoje.getFullYear(),mo2-1,dd2,12,0,0); if(dt2<hoje && !/\d{4}/.test(t)) dt2.setFullYear(dt2.getFullYear()+1); return _fmtDataISO(dt2); } }
+  var m3 = t.match(/\bdia\s+(\d{1,2})\b/);
+  if(m3){ var dn=+m3[1]; if(dn>=1&&dn<=31){ var dt3=new Date(hoje.getFullYear(),hoje.getMonth(),dn,12,0,0); if(dt3<hoje) dt3.setMonth(dt3.getMonth()+1); return _fmtDataISO(dt3); } }
+  for(var nome in _DIASSEM_PT){ if(new RegExp('\\b'+nome+'\\b').test(t)){ var alvo=_DIASSEM_PT[nome]; var dt4=new Date(hoje); var add=(alvo-dt4.getDay()+7)%7; if(add===0) add=7; dt4.setDate(dt4.getDate()+add); return _fmtDataISO(dt4); } }
+  return null;
+}
+function _parseHoraNatural(txt){
+  var t = (txt||'').toLowerCase().trim();
+  if(/meio-?dia/.test(t)) return '12:00';
+  if(/meia-?noite/.test(t)) return '00:00';
+  var m = t.match(/\b(\d{1,2})\s*(?:[:h.]\s*(\d{2}))?\s*(?:h|horas?)?\b/);
+  if(m && (/[:h]/.test(t) || /horas?/.test(t) || /(^|\s)[àa]s\s/.test(t))){
+    var hh=+m[1], mm=m[2]?+m[2]:0;
+    if(hh>=0&&hh<=23&&mm>=0&&mm<=59) return String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0');
+  }
+  return null;
+}
+function _fmtDataBR(iso){ var p=(iso||'').split('-'); return p.length===3 ? p[2]+'/'+p[1] : iso; }
+
+// Detecta início de evento. Retorna null se não for, ou {titulo, dataInline, temHora}.
+function _matchInicioEvento(msg){
+  var cmd = (msg||'').toLowerCase().trim();
+  var m = cmd.match(/^(?:cri[ae]|criar|adicion[ae]|adicionar|agend[ae]|agendar|marc[ae]|marcar|nov[oa]|bota(?:r)?|monta|monte)\s+(?:um\s+|uma\s+)?(?:evento|compromisso|reuni[ãa]o)\b\s*(.*)$/);
+  if(!m) return null;
+  var temHora = /(^|\s)[àa]s\s*\d|\d\s*h(?:oras?)?\b|\d:\d/.test(cmd);
+  if(temHora) return null; // com hora inline, o _tryLocalCreate (one-shot) cuida
+  // título inline (da msg original, preservando acentos), sem tokens de data
+  var orig = msg.match(/(?:evento|compromisso|reuni[ãa]o)\s+(.*)$/i);
+  var titulo = (orig && orig[1]) ? orig[1].trim() : '';
+  var dataInline = _parseDataNatural(titulo);
+  // remove palavras de data do título
+  titulo = titulo.replace(/\b(hoje|amanh[ãa]|depois de amanh[ãa]|dia\s+\d{1,2}|\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|\d{1,2}\s+de\s+[a-zç]+|domingo|segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado)(?:-feira)?\b/gi,'').replace(/\s{2,}/g,' ').trim();
+  return { titulo: titulo, dataInline: dataInline, temHora: false };
+}
+
+function _assistFlowIniciarEvento(info){
+  _assistFlow = { ativo:true, tipo:'evento', etapa:null, dados:{} };
+  if(info && info.titulo){ _assistFlow.dados.title = info.titulo.charAt(0).toUpperCase()+info.titulo.slice(1); }
+  if(info && info.dataInline){ _assistFlow.dados.date = info.dataInline; }
+  if(!_assistFlow.dados.title){ _assistFlow.etapa='titulo'; _localReply('Qual o nome do evento?'); return; }
+  if(!_assistFlow.dados.date){ _assistFlowEventoPergData(); return; }
+  _assistFlowEventoPergHora();
+}
+function _assistFlowEventoPergData(){
+  _assistFlow.etapa='data';
+  _localReplyComChips('Para quando?', [
+    { label:'Hoje', acao:function(){ _assistFlowEventoSetData(_parseDataNatural('hoje')); } },
+    { label:'Amanhã', acao:function(){ _assistFlowEventoSetData(_parseDataNatural('amanhã')); } },
+    { label:'Depois de amanhã', acao:function(){ _assistFlowEventoSetData(_parseDataNatural('depois de amanhã')); } }
+  ]);
+}
+function _assistFlowEventoSetData(iso){
+  if(!iso) return;
+  _assistFlow.dados.date = iso;
+  _assistFlowEventoPergHora();
+}
+function _assistFlowEventoPergHora(){
+  _assistFlow.etapa='hora';
+  _localReplyComChips('Que horas?', [
+    { label:'09:00', acao:function(){ _assistFlowCriarEvento('09:00'); } },
+    { label:'14:00', acao:function(){ _assistFlowCriarEvento('14:00'); } },
+    { label:'19:00', acao:function(){ _assistFlowCriarEvento('19:00'); } }
+  ]);
+}
+function _assistFlowCriarEvento(hora){
+  var title = _assistFlow.dados.title, date = _assistFlow.dados.date;
+  if(!title || !date || !hora){ _assistFlowReset(); _localReply('Faltou alguma informação do evento, pode pedir de novo?'); return; }
+  state.events.push({ id:uid(), title:title, date:date, time:hora, color:'#2d6c97', remind:15 });
+  save();
+  if(typeof renderEvents==='function') renderEvents();
+  if(typeof updateHome==='function') updateHome();
+  _assistFlowReset();
+  _localReply('Pronto! Agendei "'+title+'" para '+_fmtDataBR(date)+' às '+hora+'. 📅');
 }
