@@ -1108,6 +1108,10 @@ function _assistFlowTry(msg){
     _assistFlowIniciarPasta(pasta.nome);
     return true;
   }
+  if(_ehInicioTarefaGuiada(msg)){
+    _assistFlowIniciarTarefa();
+    return true;
+  }
   return false;
 }
 
@@ -1162,6 +1166,25 @@ function _assistFlowProcessar(msg){
   }
   if(_assistFlow.tipo==='pasta'){
     if(_assistFlow.etapa==='nome'){ _assistFlowFinalizarPasta(texto); return; }
+  }
+  if(_assistFlow.tipo==='tarefa'){
+    if(_assistFlow.etapa==='titulo'){ _assistFlowTarefaTitulo(texto); return; }
+    if(_assistFlow.etapa==='prioridade'){
+      // fallback por texto quando o usuário digita em vez de tocar no chip
+      var t = texto.toLowerCase();
+      var mencionaImp = /import/.test(t);
+      var mencionaUrg = /urgen|pressa|logo|hoje|agora|pra\s+j[áa]/.test(t);
+      var negaImp = /sem\s+import|n[ãa]o\s+.*import|nem\s+.*import/.test(t);
+      var negaUrg = /sem\s+(pressa|urg)|n[ãa]o\s+.*urg|nada\s+urg|nem\s+.*urg/.test(t);
+      var imp = (mencionaImp && !negaImp) ? 1 : 0;
+      var urg = (mencionaUrg && !negaUrg) ? 1 : 0;
+      // Só aplica o padrão "importante, sem pressa" quando o usuário NÃO deu
+      // nenhum sinal (nem menção, nem negação explícita como "nem urgente").
+      var deuSinal = mencionaImp || mencionaUrg || /(nenhum|nada|depois|qualquer|tanto faz|baixa|alta)/.test(t);
+      if(!imp && !urg && !deuSinal){ imp=1; urg=0; }
+      _assistFlowCriarTarefa(imp, urg);
+      return;
+    }
   }
 }
 
@@ -1229,4 +1252,56 @@ function _assistFlowCriarNota(conteudo){
   if(typeof updateHome==='function') updateHome();
   _assistFlowReset();
   _localReply('Pronto! Criei a nota "'+titulo+'" na pasta "'+folderName+'". 📝');
+}
+
+// ── TAREFA (guiada): "cria uma tarefa" → título → prioridade (Eisenhower) ──
+// Estrutura idêntica à UI (addTask): {id, text, done, importante, urgente}.
+function _ehInicioTarefaGuiada(msg){
+  var cmd = (msg||'').toLowerCase().trim();
+  var m = cmd.match(/^(?:cri[ae]|criar|adicion[ae]|adicionar|nova|novo|quero\s+(?:criar|fazer)|faz(?:er)?|bota(?:r)?|monta|monte)\s+(?:uma?\s+)?tarefa\b\s*(.*)$/);
+  if(!m) return false;
+  var resto = (m[1]||'').replace(/^[:\-\s]+/,'').replace(/\b(por favor|pra mim|pfv|agora|nova)\b/gi,'').trim();
+  return resto.length === 0; // com título inline, o _tryLocalCreate (one-shot) cuida
+}
+
+function _assistFlowIniciarTarefa(){
+  _assistFlow = { ativo:true, tipo:'tarefa', etapa:'titulo', dados:{} };
+  _localReply('Qual é a tarefa?');
+}
+
+function _assistFlowTarefaTitulo(texto){
+  if(!texto){ _localReply('Me diz o que é a tarefa.'); return; }
+  _assistFlow.dados.text = texto.charAt(0).toUpperCase()+texto.slice(1);
+  _assistFlow.etapa = 'prioridade';
+  _localReplyComChips('Boa. Qual a prioridade de "'+_assistFlow.dados.text+'"?', [
+    { label:'🔴 Importante e urgente', acao:function(){ _assistFlowCriarTarefa(1,1); } },
+    { label:'🟡 Importante, sem pressa', acao:function(){ _assistFlowCriarTarefa(1,0); } },
+    { label:'🔵 Urgente, menos importante', acao:function(){ _assistFlowCriarTarefa(0,1); } },
+    { label:'⚪ Nem urgente nem importante', acao:function(){ _assistFlowCriarTarefa(0,0); } }
+  ]);
+}
+
+function _assistFlowCriarTarefa(importante, urgente){
+  var text = _assistFlow.dados.text;
+  if(!text){ _assistFlowReset(); _localReply('Perdi o título da tarefa, pode pedir de novo?'); return; }
+  // Respeita o limite do plano gratuito, igual ao restante do app.
+  if(typeof isPremium!=='undefined' && !isPremium){
+    var ativas = (state.tasks||[]).filter(function(t){ return !t.done; });
+    var lim = (typeof PREMIUM_TASK_LIMIT!=='undefined') ? PREMIUM_TASK_LIMIT : 10;
+    if(ativas.length >= lim){
+      _assistFlowReset();
+      _localReply('Você atingiu o limite de '+lim+' tarefas do plano gratuito. Considere o Premium para tarefas ilimitadas.');
+      return;
+    }
+  }
+  state.tasks.unshift({ id:uid(), text:text, done:false, importante:importante, urgente:urgente });
+  save();
+  if(typeof renderTasks==='function') renderTasks();
+  if(typeof updateHome==='function') updateHome();
+  _assistFlowReset();
+  var etiqueta = importante&&urgente ? 'importante e urgente'
+    : importante ? 'importante'
+    : urgente ? 'urgente'
+    : 'sem prioridade';
+  _localReply('Pronto! Criei a tarefa "'+text+'" ('+etiqueta+'). ✅');
 }
