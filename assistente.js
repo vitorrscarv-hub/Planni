@@ -1090,7 +1090,7 @@ function _ehCancelamento(msg){
 function _assistFlowTry(msg){
   if(_assistFlow.ativo){
     if(_ehCancelamento(msg)){
-      var rotulos = { nota:'a nota', pasta:'a pasta', tarefa:'a tarefa', evento:'o evento', transacao:'a transação' };
+      var rotulos = { nota:'a nota', pasta:'a pasta', tarefa:'a tarefa', evento:'o evento', transacao:'a transação', meta:'a meta' };
       var t = _assistFlow.tipo;
       _assistFlowReset();
       _localReply('Ok, cancelei'+(t?' '+(rotulos[t]||t):'')+'. Quando quiser, é só pedir. 👍');
@@ -1121,6 +1121,11 @@ function _assistFlowTry(msg){
   var tx = _matchInicioTransacao(msg);
   if(tx){
     _assistFlowIniciarTransacao(tx);
+    return true;
+  }
+  var meta = _matchInicioMeta(msg);
+  if(meta){
+    _assistFlowIniciarMeta(meta);
     return true;
   }
   return false;
@@ -1177,6 +1182,19 @@ function _assistFlowProcessar(msg){
   }
   if(_assistFlow.tipo==='pasta'){
     if(_assistFlow.etapa==='nome'){ _assistFlowFinalizarPasta(texto); return; }
+  }
+  if(_assistFlow.tipo==='meta'){
+    if(_assistFlow.etapa==='nome'){
+      if(!texto){ _localReply('Me diz o nome da meta.'); return; }
+      _assistFlow.dados.name = texto.charAt(0).toUpperCase()+texto.slice(1);
+      _assistFlowMetaProximo(); return;
+    }
+    if(_assistFlow.etapa==='valor'){
+      var mv = _parseValorBR(texto);
+      if(!mv){ _localReply('Não entendi o valor. Tente "10.000" ou "5.000,50".'); return; }
+      _assistFlow.dados.target = mv; _assistFlowMetaProximo(); return;
+    }
+    if(_assistFlow.etapa==='prazo'){ _assistFlowMetaSetPrazo(texto); return; }
   }
   if(_assistFlow.tipo==='transacao'){
     if(_assistFlow.etapa==='tipo'){
@@ -1398,7 +1416,13 @@ function _parseHoraNatural(txt){
   }
   return null;
 }
-function _fmtDataBR(iso){ var p=(iso||'').split('-'); return p.length===3 ? p[2]+'/'+p[1] : iso; }
+function _fmtDataBR(iso){
+  var p=(iso||'').split('-');
+  if(p.length!==3) return iso;
+  var anoAtual = String(new Date().getFullYear());
+  // Mostra o ano só quando for diferente do atual (evita "13/08" para datas de outro ano).
+  return p[0]===anoAtual ? p[2]+'/'+p[1] : p[2]+'/'+p[1]+'/'+p[0];
+}
 
 // Detecta início de evento. Retorna null se não for, ou {titulo, dataInline, temHora}.
 function _matchInicioEvento(msg){
@@ -1521,4 +1545,65 @@ function _assistFlowCriarTransacao(desc){
   var tipoLbl = d.tipoTx==='in' ? 'receita' : 'despesa';
   var valStr = (typeof fm==='function') ? fm(d.val) : String(d.val);
   _localReply('Pronto! Registrei a '+tipoLbl+' de R$'+valStr+' em '+(d.catLabel||'Outros')+' ('+descFinal+'). ✅');
+}
+
+// ── META FINANCEIRA (guiada): nome → valor alvo → prazo ──
+// Estrutura idêntica ao addGoal financeiro: {id, name, cat:'financeira', prazo,
+// deadline, createdAt, type:'financial', target, current, marcos}.
+function _matchInicioMeta(msg){
+  var cmd = (msg||'').toLowerCase().trim();
+  var m = cmd.match(/^(?:nov[ao]|cri[ae]|criar|adicion[ae]|adicionar|defin[ae]|definir|estabelece(?:r)?|quero\s+(?:criar|ter|bater|juntar|guardar))\s+(?:uma?\s+)?(meta|objetivo)\b\s*(.*)$/);
+  if(!m) return null;
+  var orig = msg.match(/(?:meta|objetivo)\s+(?:de\s+|para\s+|chamada\s+)?(.*)$/i);
+  var nome = (orig && orig[1]) ? orig[1].trim() : '';
+  // remove um "de <valor>" no fim para o valor não vazar para o nome
+  nome = nome.replace(/\s+de\s+r?\$?\s*[\d.,]+.*$/i,'').replace(/\b(por favor|pra mim)\b/gi,'').trim();
+  return { nome: nome };
+}
+function _assistFlowIniciarMeta(info){
+  _assistFlow = { ativo:true, tipo:'meta', etapa:null, dados:{} };
+  if(info && info.nome) _assistFlow.dados.name = info.nome.charAt(0).toUpperCase()+info.nome.slice(1);
+  _assistFlowMetaProximo();
+}
+function _assistFlowMetaProximo(){
+  var d = _assistFlow.dados;
+  if(!d.name){ _assistFlow.etapa='nome'; _localReply('Qual o nome da meta?'); return; }
+  if(!d.target){ _assistFlow.etapa='valor'; _localReply('Qual o valor que você quer alcançar? (ex: 10.000)'); return; }
+  _assistFlow.etapa='prazo';
+  _localReplyComChips('Para quando?', [
+    { label:'6 meses', acao:function(){ _assistFlowMetaSetPrazo('6 meses'); } },
+    { label:'1 ano', acao:function(){ _assistFlowMetaSetPrazo('1 ano'); } },
+    { label:'2 anos', acao:function(){ _assistFlowMetaSetPrazo('2 anos'); } },
+    { label:'Sem prazo', acao:function(){ _assistFlowMetaSetPrazo('sem prazo'); } }
+  ]);
+}
+// Retorna {deadline:'YYYY-MM-DD'|'', meses:Number} ou null se não entender.
+function _parsePrazoMeta(texto){
+  var t = (texto||'').toLowerCase().trim();
+  if(/sem prazo|n[ãa]o sei|nenhum|indefinid|qualquer/.test(t)) return { deadline:'', meses:24 };
+  var mm = t.match(/(\d+)\s*(?:m[êe]s|meses)/); if(mm){ var n=+mm[1]; var d=new Date(); d.setMonth(d.getMonth()+n); return { deadline:_fmtDataISO(d), meses:n }; }
+  var ya = t.match(/(\d+)\s*anos?/); if(ya){ var n2=+ya[1]; var d2=new Date(); d2.setFullYear(d2.getFullYear()+n2); return { deadline:_fmtDataISO(d2), meses:n2*12 }; }
+  var iso = _parseDataNatural(t);
+  if(iso){ var alvo=new Date(iso+'T12:00:00'); var hoje=new Date(); var meses=Math.max(1,Math.round((alvo-hoje)/(1000*60*60*24*30.4))); return { deadline:iso, meses:meses }; }
+  return null;
+}
+function _assistFlowMetaSetPrazo(texto){
+  var pr = _parsePrazoMeta(texto);
+  if(!pr){ _localReply('Não entendi o prazo. Diga uma data ("20/12", "dia 30"), uma duração ("6 meses", "1 ano") ou "sem prazo".'); return; }
+  _assistFlowCriarMeta(pr.deadline, pr.meses);
+}
+function _assistFlowCriarMeta(deadline, meses){
+  var d = _assistFlow.dados;
+  if(!d.name || !d.target){ _assistFlowReset(); _localReply('Faltou o nome ou o valor da meta, pode pedir de novo?'); return; }
+  var prazoCat = meses<=12 ? 'curto' : (meses<=36 ? 'medio' : 'longo');
+  var marcos = (typeof GOAL_MARCOS_DEF!=='undefined' && GOAL_MARCOS_DEF.financeira)
+    ? GOAL_MARCOS_DEF.financeira.map(function(lbl){ return { label:lbl, done:false }; }) : [];
+  state.goals.push({ id:uid(), name:d.name, cat:'financeira', prazo:prazoCat, deadline:deadline||'', createdAt:new Date().toISOString(), type:'financial', target:d.target, current:0, marcos:marcos });
+  save();
+  if(typeof renderGoals==='function') renderGoals();
+  if(typeof updateHome==='function') updateHome();
+  _assistFlowReset();
+  var valStr = (typeof fm==='function') ? fm(d.target) : String(d.target);
+  var quando = deadline ? ' até '+_fmtDataBR(deadline) : '';
+  _localReply('Pronto! Criei a meta "'+d.name+'" de R$'+valStr+quando+'. 🎯');
 }
