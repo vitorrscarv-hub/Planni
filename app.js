@@ -373,10 +373,10 @@ function updateHome(){
   if(!todayEvts.length) msg+=`Você não tem eventos hoje. `;
   else msg+=`Hoje você tem <strong>${todayEvts.length} evento${todayEvts.length>1?'s':''}</strong>: ${todayEvts.slice(0,2).map(e=>`<strong>${e.time}</strong> ${e.title}`).join(', ')}. `;
   if(pendTasks.length) msg+=`<strong>${pendTasks.length} tarefa${pendTasks.length>1?'s':''}</strong> pendente${pendTasks.length>1?'s':''}. `;
-  if(bal<0) msg+=`⚠️ Saldo <strong style="color:#ff9999">negativo R$${fm(Math.abs(bal))}</strong>. `;
+  if(bal<0) msg+=`⚠️ Saldo <strong style="color:var(--red)">negativo R$${fm(Math.abs(bal))}</strong>. `;
   else msg+=`Saldo do mês: <strong>R$${fm(bal)}</strong>. `;
   if(pendBills.length){ const tb=pendBills.reduce((s,b)=>s+b.value,0); msg+=`<strong>${pendBills.length} conta${pendBills.length>1?'s':''}</strong> a pagar (R$${fm(tb)}). `; }
-  if(state.investments&&state.investments.length){ msg+=`Carteira: <strong>R$${fm(totalCurrent)}</strong> `; msg+=invRes>=0?`<strong style="color:var(--green)">(+R$${fm(invRes)})</strong>.`:`<strong style="color:#ff7b7b">(-R$${fm(Math.abs(invRes))})</strong>.`; }
+  if(state.investments&&state.investments.length){ msg+=`Carteira: <strong>R$${fm(totalCurrent)}</strong> `; msg+=invRes>=0?`<strong style="color:var(--green)">(+R$${fm(invRes)})</strong>.`:`<strong style="color:var(--red)">(-R$${fm(Math.abs(invRes))})</strong>.`; }
   document.getElementById('briefing-text').innerHTML=msg;
 
   // Weekly summary
