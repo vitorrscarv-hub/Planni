@@ -376,7 +376,7 @@ function updateHome(){
   if(bal<0) msg+=`⚠️ Saldo <strong style="color:#ff9999">negativo R$${fm(Math.abs(bal))}</strong>. `;
   else msg+=`Saldo do mês: <strong>R$${fm(bal)}</strong>. `;
   if(pendBills.length){ const tb=pendBills.reduce((s,b)=>s+b.value,0); msg+=`<strong>${pendBills.length} conta${pendBills.length>1?'s':''}</strong> a pagar (R$${fm(tb)}). `; }
-  if(state.investments&&state.investments.length){ msg+=`Carteira: <strong>R$${fm(totalCurrent)}</strong> `; msg+=invRes>=0?`<strong style="color:#5cf09a">(+R$${fm(invRes)})</strong>.`:`<strong style="color:#ff7b7b">(-R$${fm(Math.abs(invRes))})</strong>.`; }
+  if(state.investments&&state.investments.length){ msg+=`Carteira: <strong>R$${fm(totalCurrent)}</strong> `; msg+=invRes>=0?`<strong style="color:var(--green)">(+R$${fm(invRes)})</strong>.`:`<strong style="color:#ff7b7b">(-R$${fm(Math.abs(invRes))})</strong>.`; }
   document.getElementById('briefing-text').innerHTML=msg;
 
   // Weekly summary
