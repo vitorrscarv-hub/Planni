@@ -353,6 +353,98 @@ function _tryLocalQuery(msg){
 
   return null;
 }
+// ── COMANDO: importar extrato pendente para o fluxo de caixa (aba Finanças) ──
+// Só atua quando há transações de extrato aguardando confirmação
+// (_extratoPendingTx, definido em app.js). Permite confirmar/cancelar a
+// importação por linguagem natural e filtrar por tipo (receitas/despesas) e
+// por categoria — já que os dados vêm categorizados pelo /api/extrato.
+// Retorna true se tratou a mensagem.
+function _tryExtratoCommand(msg){
+  if(typeof _extratoPendingTx==='undefined' || !_extratoPendingTx || !_extratoPendingTx.length) return false;
+  var t = ' ' + String(msg||'').toLowerCase().trim() + ' ';
+
+  // Cancelar a importação
+  if(/\b(cancela(?:r)?|descarta(?:r)?|esquece|esque[çc]a|deixa(?:\s+pra\s+l[áa])?|n[ãa]o\s+(?:quero|importa|precisa|vou)|ignora(?:r)?)\b/.test(t)){
+    _extratoPendingTx = null;
+    if(typeof _extratoFinalizeCard==='function') _extratoFinalizeCard(null, '<div style="color:var(--ink3);font-weight:700;font-size:12px;text-align:center;width:100%">Importação cancelada</div>');
+    _localReply('Ok, cancelei a importação. Nada foi lançado no seu fluxo de caixa. 👍');
+    return true;
+  }
+
+  // Filtro por TIPO (receita=in, despesa=out)
+  var tipoFiltro = null;
+  var temReceita = /\b(receita\w*|entrada\w*|ganho\w*|cr[ée]dito\w*|recebiment\w*|recebi)\b/.test(t);
+  var temDespesa = /\b(despesa\w*|sa[íi]da\w*|gasto\w*|d[ée]bito\w*|pagament\w*|paguei)\b/.test(t);
+  if(temReceita && !temDespesa) tipoFiltro = 'in';
+  else if(temDespesa && !temReceita) tipoFiltro = 'out';
+
+  // Filtro por CATEGORIA (mesmas categorias do /api/extrato)
+  var CATS_KW = {
+    alimentacao:/\b(alimenta[çc][ãa]o|comida|mercado|supermercado|refei[çc][ãa]o|restaurante|ifood)\b/,
+    transporte:/\b(transporte|uber|combust[íi]vel|gasolina|passagem|[ôo]nibus|metr[ôo])\b/,
+    moradia:/\b(moradia|aluguel|condom[íi]nio)\b/,
+    saude:/\b(sa[úu]de|farm[áa]cia|rem[ée]dio|m[ée]dico|consulta)\b/,
+    lazer:/\b(lazer|divers[ãa]o|cinema|streaming|viagem)\b/,
+    compras:/\b(compras|shopping|loja|roupa\w*)\b/,
+    educacao:/\b(educa[çc][ãa]o|curso|escola|faculdade|mensalidade)\b/,
+    servicos:/\b(servi[çc]os?|assinatura\w*|internet|luz|[áa]gua|telefone)\b/,
+    salario:/\b(sal[áa]rio\w*)\b/,
+    investimentos:/\b(investimento\w*|aplica[çc][ãa]o|renda\s+fixa)\b/
+  };
+  var catsFiltro = [];
+  for(var c in CATS_KW){ if(CATS_KW[c].test(t)) catsFiltro.push(c); }
+  var temFiltro = !!tipoFiltro || catsFiltro.length > 0;
+
+  // Intenção de importar: verbo forte; verbo fraco + contexto; afirmação seca;
+  // "fluxo de caixa"; ou um filtro explícito com "só/somente/apenas"
+  // (ex.: "só as despesas"). Perguntas ("quais as despesas?") não têm nenhum
+  // desses sinais e caem fora, para serem respondidas pela calculadora local.
+  var verboForte = /\b(importa(?:r)?|confirma(?:r)?|lan[çc]a(?:r)?)\b/.test(t);
+  var verboFraco = /\b(adiciona(?:r)?|inclui(?:r)?|joga(?:r)?|p[õo]e|manda(?:\s+ver)?|salva(?:r)?|registra(?:r)?)\b/.test(t);
+  var contexto  = /\b(extrato|import\w*|tudo|isso|esses|essas|elas|eles|fluxo\s+de\s+caixa|financ\w*|receita\w*|despesa\w*|entrada\w*|sa[íi]da\w*|categoria\w*|resto)\b/.test(t);
+  // sem \b após "só": o "ó" acentuado não é caractere de palavra e quebraria a
+  // borda final; usa os espaços da string já emoldurada (t = ' ...msg... ').
+  var soPalavra = /\s(s[óo]|somente|apenas)\s/.test(t);
+  var afirmacao = /^\s*(sim|isso|isso\s+mesmo|ok|okay|beleza|claro|com\s+certeza|bora|vai|manda|pode(?:\s+ser)?)\s*$/.test(t);
+  var querImportar = verboForte || afirmacao || /\bfluxo\s+de\s+caixa\b/.test(t) || (verboFraco && contexto) || (temFiltro && soPalavra);
+  if(!querImportar) return false;
+
+  // Subconjunto conforme filtros (referências preservadas para remover depois)
+  var subset = _extratoPendingTx.filter(function(tx){
+    if(tipoFiltro && tx.type !== tipoFiltro) return false;
+    if(catsFiltro.length && catsFiltro.indexOf(tx.cat) === -1) return false;
+    return true;
+  });
+
+  if(temFiltro && !subset.length){
+    _localReply('Não encontrei transações desse tipo nesse extrato. Se quiser, é só dizer "importar tudo".');
+    return true;
+  }
+
+  var added = (typeof _extratoImportList==='function') ? _extratoImportList(subset) : 0;
+
+  // Remove as importadas do pendente (mantém o restante para novo comando)
+  _extratoPendingTx = _extratoPendingTx.filter(function(tx){ return subset.indexOf(tx) === -1; });
+  var restam = _extratoPendingTx.length;
+
+  if(typeof _extratoFinalizeCard==='function'){
+    var cardMsg = restam
+      ? '✓ '+added+' importada'+(added===1?'':'s')+' · '+restam+' restante'+(restam===1?'':'s')
+      : '✓ '+added+' transaç'+(added===1?'ão':'ões')+' importada'+(added===1?'':'s')+'!';
+    _extratoFinalizeCard(null, '<div style="color:var(--green);font-weight:800;font-size:12px;text-align:center;width:100%">'+cardMsg+'</div>');
+  }
+  if(typeof toast==='function') toast('✓ '+added+' transações adicionadas ao Finanças!');
+
+  var descFiltro = '';
+  if(tipoFiltro==='in') descFiltro = ' (receitas)';
+  else if(tipoFiltro==='out') descFiltro = ' (despesas)';
+  if(catsFiltro.length) descFiltro += ' de ' + catsFiltro.join(', ');
+  var resposta = 'Pronto! Lancei '+added+' transaç'+(added===1?'ão':'ões')+descFiltro+' no seu fluxo de caixa, na aba Finanças. 💸';
+  if(restam) resposta += ' Ainda '+(restam===1?'resta 1':'restam '+restam)+' — diga "importar o resto" para incluir.';
+  _localReply(resposta);
+  return true;
+}
+
 async function aiChatSend(){
   // Se estiver gravando, para antes de enviar
   if(_chatRecording) _stopChatVoice();
@@ -370,6 +462,15 @@ async function aiChatSend(){
   if(_assistFlowTry(msg)){
     _aiChatHistory.push({role:'user',text:msg});
     _aiChatHistory.push({role:'model',text:'(fluxo guiado do assistente)'});
+    return;
+  }
+
+  // IMPORTAÇÃO DE EXTRATO POR COMANDO: quando há transações de extrato
+  // aguardando confirmação, "importar", "só as despesas", "cancelar" etc. são
+  // tratados aqui (local, sem IA) e lançados no fluxo de caixa da aba Finanças.
+  if(_tryExtratoCommand(msg)){
+    _aiChatHistory.push({role:'user',text:msg});
+    _aiChatHistory.push({role:'model',text:'(importação de extrato tratada pelo app, nenhuma ação adicional necessária)'});
     return;
   }
 

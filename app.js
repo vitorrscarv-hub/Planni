@@ -4324,6 +4324,7 @@ function _aiAddBubble(text, cls){
 }
 
 var _extratoPendingTx = null; // transações aguardando confirmação do usuário
+var _extratoLastCard = null;  // referência ao último card de resumo (p/ atualizar via comando)
 
 function openExtratoPicker(){
   if(!isPremium){ openPremiumModal(); return; }
@@ -4577,15 +4578,19 @@ function _renderExtratoSummary(txs, summary){
     +'<div class="es-actions">'
       +'<button class="es-btn cancel" onclick="_cancelExtratoImport(this)">Cancelar</button>'
       +'<button class="es-btn confirm" onclick="_confirmExtratoImport(this)">✓ Importar tudo</button>'
-    +'</div>';
+    +'</div>'
+    +'<div class="es-hint">💬 Ou me diga por aqui: <b>"importar tudo"</b>, <b>"só as despesas"</b> ou <b>"cancelar"</b></div>';
   box.appendChild(div);
+  _extratoLastCard = div;
   box.scrollTop = box.scrollHeight;
 }
 
-function _confirmExtratoImport(btn){
-  if(!_extratoPendingTx || !_extratoPendingTx.length){ return; }
+// Lança uma lista de transações do extrato no fluxo de caixa (state.transactions)
+// e atualiza Finanças/Início. Retorna quantas foram adicionadas. Usado tanto pelo
+// botão quanto pelo comando de voz/texto do assistente.
+function _extratoImportList(list){
   var added = 0;
-  _extratoPendingTx.forEach(function(t){
+  (list || []).forEach(function(t){
     state.transactions.push({
       id: uid(),
       desc: t.pessoa ? (t.desc+' · '+t.pessoa) : t.desc,
@@ -4597,27 +4602,36 @@ function _confirmExtratoImport(btn){
     });
     added++;
   });
-  save(); 
-  try{ renderFinance(); }catch(e){}
-  updateHome();
-  _extratoPendingTx = null;
+  if(added){
+    save();
+    try{ renderFinance(); }catch(e){}
+    updateHome();
+  }
+  return added;
+}
 
-  // Substitui os botões por uma confirmação
-  var wrap = btn.closest('.extrato-summary');
+// Substitui a área de ações do card de resumo por uma mensagem final.
+function _extratoFinalizeCard(el, htmlMsg){
+  var wrap = el || _extratoLastCard;
   if(wrap){
     var actions = wrap.querySelector('.es-actions');
-    if(actions) actions.innerHTML = '<div style="color:var(--green);font-weight:800;font-size:12px;text-align:center;width:100%">✓ '+added+' transações importadas!</div>';
+    if(actions) actions.innerHTML = htmlMsg;
+    var hint = wrap.querySelector('.es-hint');
+    if(hint) hint.remove();
   }
+}
+
+function _confirmExtratoImport(btn){
+  if(!_extratoPendingTx || !_extratoPendingTx.length){ return; }
+  var added = _extratoImportList(_extratoPendingTx);
+  _extratoPendingTx = null;
+  _extratoFinalizeCard(btn.closest('.extrato-summary'), '<div style="color:var(--green);font-weight:800;font-size:12px;text-align:center;width:100%">✓ '+added+' transações importadas!</div>');
   toast('✓ '+added+' transações adicionadas ao Finanças!');
 }
 
 function _cancelExtratoImport(btn){
   _extratoPendingTx = null;
-  var wrap = btn.closest('.extrato-summary');
-  if(wrap){
-    var actions = wrap.querySelector('.es-actions');
-    if(actions) actions.innerHTML = '<div style="color:var(--ink3);font-weight:700;font-size:12px;text-align:center;width:100%">Importação cancelada</div>';
-  }
+  _extratoFinalizeCard(btn.closest('.extrato-summary'), '<div style="color:var(--ink3);font-weight:700;font-size:12px;text-align:center;width:100%">Importação cancelada</div>');
 }
 
 

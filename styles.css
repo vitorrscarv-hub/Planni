@@ -698,6 +698,8 @@ input[list]{background-image:none}
 .extrato-summary .es-item .es-item-val.in{color:var(--green-dark)}
 .extrato-summary .es-item .es-item-val.out{color:var(--red-dark)}
 .extrato-summary .es-actions{display:flex;gap:8px}
+.extrato-summary .es-hint{font-size:10.5px;color:var(--ink3);text-align:center;margin-top:8px;line-height:1.5}
+.extrato-summary .es-hint b{color:var(--ink2);font-weight:700}
 .extrato-summary .es-btn{flex:1;border:none;border-radius:100px;padding:9px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer}
 .extrato-summary .es-btn.confirm{background:linear-gradient(160deg,var(--sky),var(--sky2));color:#fff;box-shadow:0 5px 16px rgba(28,74,110,.32),inset 0 1px 0 rgba(255,255,255,.25)}
 .extrato-summary .es-btn.confirm:active{transform:scale(.97)}
