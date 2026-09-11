@@ -589,7 +589,7 @@ function _tryLocalCreate(msg){
     var dEv = new Date();
     if(/amanhã|amanha/.test(cmd)) dEv.setDate(dEv.getDate()+1);
     if(/depois de amanhã|depois de amanha/.test(cmd)) dEv.setDate(dEv.getDate()+2);
-    state.events.push({ id:uid(), title:titEv.charAt(0).toUpperCase()+titEv.slice(1), date:dEv.toISOString().slice(0,10), time:hh+':'+mm, color:'#2d6c97', remind:15 });
+    state.events.push({ id:uid(), title:titEv.charAt(0).toUpperCase()+titEv.slice(1), date:_fmtDataISO(dEv), time:hh+':'+mm, color:'#2d6c97', remind:15 });
     save(); if(typeof renderEvents==='function') renderEvents(); updateHome();
     var quando = /amanhã|amanha/.test(cmd) ? 'amanhã' : 'hoje';
     return '✓ Agendei "'+titEv+'" para '+quando+' às '+hh+':'+mm+'.';

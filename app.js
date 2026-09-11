@@ -220,7 +220,7 @@ function startRealtimeSync(){
 // UTILS
 // ═══════════════════════════════════════
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
-function today(){ return new Date().toISOString().slice(0,10); }
+function today(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function fm(n){ return Number(n).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fm0(n){ return Number(n).toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0}); }
 function fmtDate(d){
