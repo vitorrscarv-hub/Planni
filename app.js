@@ -3561,6 +3561,9 @@ function loginEmail(){
 
   } else {
     var keepConnected = document.getElementById('keep-connected') ? document.getElementById('keep-connected').checked : true;
+    // Guarda a preferência para uso após reabrir o app já logado (quando o
+    // checkbox não é consultado). '1' = manter conectado; '0' = trava de inatividade.
+    try{ localStorage.setItem('planni_keep', keepConnected ? '1' : '0'); }catch(e){}
     var persistence = keepConnected ? firebase.auth.Auth.Persistence.LOCAL : firebase.auth.Auth.Persistence.SESSION;
     setAuthStatus('Entrando...');
     auth.setPersistence(persistence).then(function(){
@@ -3867,9 +3870,16 @@ async function loginBiometric(){
   }catch(e){ toast('Biometria não disponível ou cancelada'); }
 }
 
+// Preferência "manter conectado": padrão é MANTER (só é false se o usuário
+// desmarcou explicitamente no login e gravamos '0').
+function _keepConnectedPref(){
+  try{ return localStorage.getItem('planni_keep') !== '0'; }catch(e){ return true; }
+}
 let inactivityTimer;
 function resetInactivity(){
   clearTimeout(inactivityTimer);
+  // Com "manter conectado" ligado, nunca desloga por inatividade — só no Sair.
+  if(_keepConnectedPref()) return;
   inactivityTimer=setTimeout(()=>{ if(currentUser){ logout(); } },5*60*1000);
 }
 ['touchstart','click','keydown'].forEach(ev=>document.addEventListener(ev,resetInactivity,{passive:true}));
