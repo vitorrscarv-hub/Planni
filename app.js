@@ -354,8 +354,6 @@ function updateHome(){
   const h=new Date().getHours();
   const sal=h<12?'Bom dia':h<18?'Boa tarde':'Boa noite';
 
-  document.getElementById('h-events').textContent=todayEvts.length;
-  document.getElementById('h-tasks').textContent=pendTasks.length;
   document.getElementById('h-bills').textContent=pendBills.length;
   const bEl=document.getElementById('h-balance');
   bEl.textContent='R$'+fm0(Math.abs(bal));
@@ -370,9 +368,6 @@ function updateHome(){
 
   // Briefing — usa o primeiro nome do usuário logado
   let msg=`<strong>${sal}, ${getUserFirstName()}!</strong> `;
-  if(!todayEvts.length) msg+=`Você não tem eventos hoje. `;
-  else msg+=`Hoje você tem <strong>${todayEvts.length} evento${todayEvts.length>1?'s':''}</strong>: ${todayEvts.slice(0,2).map(e=>`<strong>${e.time}</strong> ${e.title}`).join(', ')}. `;
-  if(pendTasks.length) msg+=`<strong>${pendTasks.length} tarefa${pendTasks.length>1?'s':''}</strong> pendente${pendTasks.length>1?'s':''}. `;
   if(bal<0) msg+=`⚠️ Saldo <strong style="color:var(--red)">negativo R$${fm(Math.abs(bal))}</strong>. `;
   else msg+=`Saldo do mês: <strong>R$${fm(bal)}</strong>. `;
   if(pendBills.length){ const tb=pendBills.reduce((s,b)=>s+b.value,0); msg+=`<strong>${pendBills.length} conta${pendBills.length>1?'s':''}</strong> a pagar (R$${fm(tb)}). `; }
@@ -384,14 +379,6 @@ function updateHome(){
 
   // Insights carousel
   try{ renderHomeInsights(); }catch(e){}
-
-  // Agenda list
-  const agEl=document.getElementById('h-agenda');
-  agEl.innerHTML=todayEvts.length?todayEvts.map(e=>`<div class="event-item"><div class="event-time">${e.time}</div><div class="event-dot" style="background:${e.color}"></div><div class="event-info"><div class="event-title">${e.title}</div></div></div>`).join(''):'<div class="empty"><div class="empty-icon">📅</div>Nenhum evento hoje</div>';
-
-  // Tasks list
-  const tEl=document.getElementById('h-tasks-list');
-  tEl.innerHTML=pendTasks.length?pendTasks.slice(0,4).map(t=>{var q=_taskQuadrant(t);var ql={q1:'FAZER',q2:'AGENDAR',q3:'DELEGAR',q4:'ELIMINAR'}[q];return `<div class="task-item"><div class="task-check" onclick="quickDoneTask('${t.id}')"></div><div class="task-text">${t.text}</div><span class="task-prio ${q}">${ql}</span></div>`;}).join(''):'<div class="empty"><div class="empty-icon">✅</div>Tudo em dia!</div>';
 }
 
 function quickDoneTask(id){
@@ -1990,10 +1977,7 @@ function processVoice(cmd){
   if(saidaM){ const val=parseFloat(saidaM[1].replace(',','.')); const descRaw=(saidaM[2]||'').trim()||'Despesa voz'; const cat=/pix|ted|transferi|enviei/.test(cmd)?'pix':detectCat(cmd+' '+descRaw); state.transactions.unshift({id:uid(),desc:descRaw,val,type:'out',cat,date:today()}); save(); renderFinance(); updateHome(); res.textContent=`✓ R$${fm(val)} em ${getCatInfo(cat).label}`; setTimeout(closeVoice,2000); return; }
   const entM=cmd.match(/(?:recebi|salário de?|ganhei)\s+(?:r\$\s*)?(\d+(?:[,.]\d{1,2})?)/);
   if(entM){ const val=parseFloat(entM[1].replace(',','.')); state.transactions.unshift({id:uid(),desc:'Entrada voz',val,type:'in',cat:'salario',date:today()}); save(); renderFinance(); updateHome(); res.textContent=`✓ Entrada R$${fm(val)}`; setTimeout(closeVoice,2000); return; }
-  const evtM=cmd.match(/(.+?)\s+(?:amanhã|hoje)\s*(?:às?|as)\s*(\d{1,2})(?::(\d{2}))?/);
-  if(evtM){ const title=evtM[1].trim(); const hh=evtM[2].padStart(2,'0'); const mm=(evtM[3]||'00').padStart(2,'0'); const d=new Date(); if(cmd.includes('amanhã')) d.setDate(d.getDate()+1); state.events.push({id:uid(),title,date:d.toISOString().slice(0,10),time:`${hh}:${mm}`,color:'#2d7dd2',remind:15}); save(); renderEvents(); updateHome(); res.textContent=`✓ Evento "${title}" às ${hh}:${mm}`; setTimeout(closeVoice,2000); return; }
-  const tarM=cmd.match(/(?:tarefa|lembrar de?|fazer|preciso|anotar tarefa)\s+(.+)/);
-  if(tarM){ const text=tarM[1].trim(); state.tasks.unshift({id:uid(),text,done:false,importante:1,urgente:0}); save(); renderTasks(); updateHome(); res.textContent=`✓ Tarefa: "${text}"`; setTimeout(closeVoice,2000); return; }
+  // Eventos e tarefas por voz desativados — Agenda e Tarefas saíram do app.
   const notaM=cmd.match(/(?:anotar|nota)\s+(.+)/);
   if(notaM){ state.notes.unshift({id:uid(),title:'Nota de voz',body:notaM[1].trim(),date:new Date().toISOString()}); save(); renderNotes(); res.textContent='✓ Nota salva'; setTimeout(closeVoice,2000); return; }
   const metaM=cmd.match(/(?:meta|objetivo)\s+(.+?)\s+(?:de?|r\$)?\s*(\d+(?:[,.]\d{1,2})?)/);
@@ -2269,11 +2253,14 @@ function openVoiceFromFAB(){}
 // ═══════════════════════════════════════════════════════
 // SCREEN TRANSITIONS — iPhone style
 // ═══════════════════════════════════════════════════════
-var _tabOrder=['home','finance','bills','goals','notes','tasks','reports','dashboard','invest','agenda'];
+var _tabOrder=['home','finance','bills','goals','notes','reports','dashboard','invest'];
 var _currentScreenName='home';
 
 var _showScreenCore=showScreen;
 function showScreen(name,el){
+  // Agenda e Tarefas foram removidas do app: qualquer navegação para elas
+  // (voz, "ir para aba", links legados) volta ao Início. Kill switch central.
+  if(name==='agenda'||name==='tasks'){ name='home'; el=null; }
   var prevIdx=_tabOrder.indexOf(_currentScreenName);
   var nextIdx=_tabOrder.indexOf(name);
   var dir=nextIdx>=prevIdx?'right':'left';
@@ -2457,7 +2444,7 @@ function processVoice(cmd){
   var res=document.getElementById('voice-result');
   var setRes=function(txt,col){if(res){res.textContent=txt;res.style.color=col||'var(--green)';}};
   // NAVIGATION
-  var navMap={financas:'finance','finanças':'finance',inicio:'home','início':'home',home:'home',contas:'bills',metas:'goals',notas:'notes',tarefas:'tasks',agenda:'agenda',investimentos:'invest',dashboard:'dashboard','relatórios':'reports',relatorios:'reports',ia:'ai'};
+  var navMap={financas:'finance','finanças':'finance',inicio:'home','início':'home',home:'home',contas:'bills',metas:'goals',notas:'notes',investimentos:'invest',dashboard:'dashboard','relatórios':'reports',relatorios:'reports',ia:'ai'};
   var navM=cmd.match(/(?:ir para|abrir|mostrar|vai para?|abre)\s+(.+)/);
   if(navM){var sc=navMap[navM[1].trim()];if(sc){navTo(sc);setRes('✓ Abrindo '+navM[1]);stopRecording();setTimeout(closeVoice,1500);return;}}
   // DESPESAS
@@ -2466,12 +2453,7 @@ function processVoice(cmd){
   // RECEITAS
   var entM=cmd.match(/(?:recebi|salário de?|ganhei|entrou|depositou|caiu)\s+(?:r\$\s*)?(\d+(?:[,.]\d{1,2})?)/);
   if(entM){var val2=parseFloat(entM[1].replace(',','.'));var desc2=cmd.includes('salário')?'Salário':'Receita';state.transactions.unshift({id:uid(),desc:desc2,val:val2,type:'in',cat:'salario',date:today()});save();renderFinance();updateHome();setRes('✓ Receita R$'+fm(val2));stopRecording();setTimeout(closeVoice,2000);return;}
-  // EVENTOS
-  var evtM=cmd.match(/(?:reunião|evento|compromisso|consulta|dentista|médico|encontro)\s*(.+?)\s*(?:amanhã|hoje)?\s*(?:às?|as)\s*(\d{1,2})(?::(\d{2}))?/);
-  if(evtM){var et=( evtM[1]||'Evento').trim()||'Evento';var hh=evtM[2].padStart(2,'0');var mm=(evtM[3]||'00').padStart(2,'0');var d=new Date();if(cmd.includes('amanhã')) d.setDate(d.getDate()+1);state.events.push({id:uid(),title:et,date:d.toISOString().slice(0,10),time:hh+':'+mm,color:'#2d7dd2',remind:15});save();renderEvents();updateHome();setRes('✓ "'+et+'" às '+hh+':'+mm);stopRecording();setTimeout(closeVoice,2000);return;}
-  // TAREFAS
-  var tarM=cmd.match(/(?:tarefa|lembrar de?|fazer|preciso|anotar tarefa)\s+(.+)/);
-  if(tarM){var txt=tarM[1].trim();state.tasks.unshift({id:uid(),text:txt,done:false,importante:1,urgente:0});save();renderTasks();updateHome();setRes('✓ Tarefa: "'+txt+'"');stopRecording();setTimeout(closeVoice,2000);return;}
+  // Eventos e tarefas por voz desativados — Agenda e Tarefas saíram do app.
   // NOTAS
   var notaM=cmd.match(/(?:anotar|nota|escrever|registrar)\s+(.+)/);
   if(notaM){state.notes.unshift({id:uid(),title:'Nota de voz',body:notaM[1].trim(),date:new Date().toISOString()});save();renderNotes();setRes('✓ Nota salva');stopRecording();setTimeout(closeVoice,2000);return;}
@@ -3078,7 +3060,7 @@ function refreshGroupEvents(){
   mergeGroupEvents(data.events||[]);
   renderGroupBar();
 }
-var PREMIUM_SCREENS = ['invest','agenda','finance','reports'];
+var PREMIUM_SCREENS = ['invest','finance','reports','goals','notes'];
 var PREMIUM_TASK_LIMIT = 10; // máx de tarefas ativas no plano gratuito
 var isPremium = false;
 var _premiumUnsub = null;
@@ -5183,24 +5165,7 @@ var _INV_TIPOS = [
 function _aiExecuteAction(a){
   var args=a.args||{};
   try{
-    if(a.name==='criar_evento'){
-      state.events.push({
-        id:uid(), title:args.titulo||'Evento',
-        date:args.data, time:args.hora||'09:00',
-        color:'#2d7dd2', remind:(args.lembrete_min!==undefined?args.lembrete_min:15)
-      });
-      if(typeof renderEvents==='function') renderEvents();
-      return 'Evento: '+(args.titulo||'')+' ('+args.data+' '+(args.hora||'')+')';
-    }
-    if(a.name==='criar_tarefa'){
-      state.tasks.unshift({
-        id:uid(), text:args.texto||'Tarefa', done:false,
-        importante:(args.importante===false?0:1),
-        urgente:(args.urgente===true?1:0)
-      });
-      if(typeof renderTasks==='function') renderTasks();
-      return 'Tarefa: '+(args.texto||'');
-    }
+    // criar_evento e criar_tarefa foram desativados — Agenda e Tarefas saíram do app.
     if(a.name==='criar_transacao'){
       var tp=(args.tipo==='in')?'in':'out';
       state.transactions.unshift({

@@ -642,27 +642,7 @@ function _tryLocalTransaction(msg){
 function _tryLocalCreate(msg){
   var cmd = msg.toLowerCase();
 
-  // ----- TAREFA: "crie uma tarefa [com o nome de] X" -----
-  var tarM = cmd.match(/(?:crie|criar|adicione|adicionar|nova|novo|faz|fazer|bota|colar?)\s+(?:uma?\s+)?tarefa(?:\s+(?:com o nome de|chamada|de|:|para|pra))?\s*(.*)/);
-  if(tarM){
-    var txt = (tarM[1]||'').trim();
-    // pega o texto original (preserva acentos/maiusculas) a partir da posicao
-    var origMatch = msg.match(/tarefa(?:\s+(?:com o nome de|chamada|de|:|para|pra))?\s*(.*)/i);
-    if(origMatch && origMatch[1]) txt = origMatch[1].trim();
-    if(txt){
-      if(!isPremium){
-        var ativas = state.tasks.filter(function(t){ return !t.done; });
-        if(ativas.length >= (typeof PREMIUM_TASK_LIMIT!=='undefined'?PREMIUM_TASK_LIMIT:10)){
-          return 'Você atingiu o limite de tarefas do plano gratuito. Considere o Premium para tarefas ilimitadas.';
-        }
-      }
-      var urgente = /urgente/.test(cmd);
-      var importante = /importante/.test(cmd) || !urgente;
-      state.tasks.unshift({ id:uid(), text:txt.charAt(0).toUpperCase()+txt.slice(1), done:false, importante:importante, urgente:urgente });
-      save(); renderTasks(); updateHome();
-      return '✓ Criei a tarefa "'+txt+'".';
-    }
-  }
+  // Tarefa e Evento foram removidos do app — não são mais criados por aqui.
 
   // ----- NOTA: "adicione uma nota [:] X" -----
   var notaM = cmd.match(/(?:crie|criar|adicione|adicionar|nova|novo|anote|anotar|escreva)\s+(?:uma?\s+)?nota(?:\s*(?::|com o nome de|chamada|de|sobre))?\s*(.*)/);
@@ -675,25 +655,6 @@ function _tryLocalCreate(msg){
       save(); if(typeof renderNotes==='function') renderNotes(); updateHome();
       return '✓ Criei a nota "'+titulo+'".';
     }
-  }
-
-  // ----- EVENTO: "crie um evento X amanha as 15h" / "reuniao hoje as 9h" -----
-  var evtM = cmd.match(/(?:crie|criar|adicione|adicionar|agende|agendar|marque|marcar)\s+(?:um\s+)?(?:evento|compromisso|reuni[ãa]o)\s+(.*?)\s+(?:às|as|para as|pra)\s+(\d{1,2})(?:[:h](\d{2}))?/);
-  if(evtM){
-    var origE = msg.match(/(?:evento|compromisso|reuni[ãa]o)\s+(.*?)\s+(?:às|as|para as|pra)\s+\d/i);
-    var titEv = (origE && origE[1]) ? origE[1].trim() : (evtM[1]||'Evento').trim();
-    // Remove palavras de tempo que vazam para o titulo (sem \b por causa dos acentos)
-    titEv = titEv.replace(/(^|\s)(amanhã|amanha|hoje|depois de amanhã|depois de amanha|de manhã|de manha|à tarde|a tarde|à noite|a noite)(\s|$)/gi,' ').replace(/\s{2,}/g,' ').trim();
-    if(!titEv) titEv = 'Evento';
-    var hh = evtM[2].padStart(2,'0');
-    var mm = (evtM[3]||'00').padStart(2,'0');
-    var dEv = new Date();
-    if(/amanhã|amanha/.test(cmd)) dEv.setDate(dEv.getDate()+1);
-    if(/depois de amanhã|depois de amanha/.test(cmd)) dEv.setDate(dEv.getDate()+2);
-    state.events.push({ id:uid(), title:titEv.charAt(0).toUpperCase()+titEv.slice(1), date:_fmtDataISO(dEv), time:hh+':'+mm, color:'#2d6c97', remind:15 });
-    save(); if(typeof renderEvents==='function') renderEvents(); updateHome();
-    var quando = /amanhã|amanha/.test(cmd) ? 'amanhã' : 'hoje';
-    return '✓ Agendei "'+titEv+'" para '+quando+' às '+hh+':'+mm+'.';
   }
 
   return null;
@@ -1210,15 +1171,8 @@ function _assistFlowTry(msg){
     _assistFlowIniciarPasta(pasta.nome);
     return true;
   }
-  if(_ehInicioTarefaGuiada(msg)){
-    _assistFlowIniciarTarefa();
-    return true;
-  }
-  var evento = _matchInicioEvento(msg);
-  if(evento){
-    _assistFlowIniciarEvento(evento);
-    return true;
-  }
+  // Tarefa e Evento foram removidos do app — o assistente não inicia mais
+  // esses fluxos (evita criar itens que não teriam onde aparecer).
   var tx = _matchInicioTransacao(msg);
   if(tx){
     _assistFlowIniciarTransacao(tx);
