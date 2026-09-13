@@ -1016,7 +1016,8 @@ function _tryLocalInvestimento(msg){
 //  como globais — carregado antes.)
 
 function openAIChat(){
-  if(!isPremium){ openPremiumModal(); return; }
+  var liberado = (typeof podeUsarAssistente==='function') ? podeUsarAssistente() : isPremium;
+  if(!liberado){ openPremiumModal(); return; }
   var sheet=document.getElementById('ai-chat-sheet');
   if(sheet){ sheet.classList.add('show'); }
   try{ _updateChatBtn(); }catch(e){}

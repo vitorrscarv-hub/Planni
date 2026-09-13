@@ -379,6 +379,9 @@ function updateHome(){
 
   // Insights carousel
   try{ renderHomeInsights(); }catch(e){}
+
+  // Aviso do teste grátis (contagem regressiva)
+  try{ _renderTrialBanner(); }catch(e){}
 }
 
 function quickDoneTask(id){
@@ -3125,28 +3128,87 @@ function setPremiumStatus(value){
   applyPremiumState();
 }
 
+// ── TESTE GRÁTIS (7 dias) para quem só se cadastrou no app ──────────────────
+// Durante o teste, além do Início, ficam liberados o Fluxo de caixa (finance) e
+// o Assistente. Metas/Notas/Investimentos/Relatórios seguem premium desde já.
+// Início do teste = criação da conta (currentUser.createdAt, do Firebase Auth).
+var TRIAL_DAYS = 7;
+var TRIAL_FREE_SCREENS = ['finance']; // liberadas no teste (Início é sempre livre)
+
+function _signupMs(){
+  try{
+    if(currentUser && currentUser.createdAt){
+      var t = new Date(currentUser.createdAt).getTime();
+      if(!isNaN(t)) return t;
+    }
+  }catch(e){}
+  return null;
+}
+// Dias restantes do teste (0..TRIAL_DAYS). Sem data conhecida, assume recém-criado.
+function trialDaysLeft(){
+  var ms = _signupMs();
+  if(ms === null) return TRIAL_DAYS;
+  var passados = Math.floor((Date.now() - ms) / 86400000);
+  return Math.max(0, TRIAL_DAYS - passados);
+}
+function trialActive(){ return !isPremium && trialDaysLeft() > 0; }
+function trialExpired(){ return !isPremium && trialDaysLeft() <= 0; }
+// O Assistente pode abrir? (premium ou dentro do teste)
+function podeUsarAssistente(){ return isPremium || trialActive(); }
+
 function applyPremiumState(){
-  // Mostra/esconde overlays de lock nas telas premium
+  var emTeste = trialActive();
+  // Overlays de lock: liberado se premium, ou (no teste) se a tela é de teste
   PREMIUM_SCREENS.forEach(function(screen){
     var lock = document.getElementById(screen+'-lock');
-    if(lock) lock.style.display = isPremium ? 'none' : 'flex';
+    if(!lock) return;
+    var liberado = isPremium || (emTeste && TRIAL_FREE_SCREENS.indexOf(screen) !== -1);
+    lock.style.display = liberado ? 'none' : 'flex';
   });
-  // FAB do chat: visual de bloqueado pra não-premium
+  // FAB do assistente: habilitado no premium ou durante o teste
+  var podeAssist = podeUsarAssistente();
   var fab = document.getElementById('fab-main');
   if(fab){
-    fab.style.opacity = isPremium ? '1' : '0.6';
-    fab.title = isPremium ? '' : 'Recurso Premium';
+    fab.style.opacity = podeAssist ? '1' : '0.6';
+    fab.title = podeAssist ? '' : 'Recurso Premium';
   }
-  // Badge de limite de tarefas
   _applyTaskLimit();
   // Status no perfil
   var profPrem = document.getElementById('profile-premium-status');
   if(profPrem){
     if(isPremium){
       profPrem.innerHTML = '<span class="premium-badge">✦ PREMIUM ATIVO</span>';
+    } else if(emTeste){
+      var dl = trialDaysLeft();
+      profPrem.innerHTML = '<span style="font-size:11px;color:var(--sky);cursor:pointer;font-weight:700" onclick="openPremiumModal()">Teste grátis · '+dl+' dia'+(dl===1?'':'s')+' — assinar →</span>';
     } else {
       profPrem.innerHTML = '<span style="font-size:11px;color:var(--ink3);cursor:pointer;font-weight:700" onclick="openPremiumModal()">Fazer upgrade para Premium →</span>';
     }
+  }
+  _renderTrialBanner();
+}
+
+// Aviso do teste grátis no Início: contagem regressiva + nota de cobrança 30d.
+function _renderTrialBanner(){
+  var el = document.getElementById('trial-banner');
+  if(!el) return;
+  if(isPremium){ el.style.display='none'; el.innerHTML=''; return; }
+  var dias = trialDaysLeft();
+  el.style.display = 'block';
+  if(dias > 0){
+    el.className = 'trial-banner';
+    el.innerHTML =
+      '<div class="tb-row"><span class="tb-icon">🎁</span>'
+      +'<div class="tb-txt"><b>Teste grátis — '+dias+' dia'+(dias===1?'':'s')+' restante'+(dias===1?'':'s')+'</b>'
+      +'<span>Ao assinar, você só é cobrado após 30 dias.</span></div></div>'
+      +'<button class="tb-btn" onclick="openPremiumModal()">Assinar</button>';
+  } else {
+    el.className = 'trial-banner expired';
+    el.innerHTML =
+      '<div class="tb-row"><span class="tb-icon">🔒</span>'
+      +'<div class="tb-txt"><b>Seu teste grátis terminou</b>'
+      +'<span>Assine para voltar a usar o Fluxo de caixa e o Assistente. Cobrança só após 30 dias.</span></div></div>'
+      +'<button class="tb-btn" onclick="openPremiumModal()">Assinar</button>';
   }
 }
 
@@ -3402,7 +3464,9 @@ function initAuth(){
         uid:   user.uid,
         email: user.email,
         name:  user.displayName || user.email.split('@')[0],
-        photo: user.photoURL || null
+        photo: user.photoURL || null,
+        // Início do teste grátis = criação da conta (fonte confiável do Firebase Auth)
+        createdAt: (user.metadata && user.metadata.creationTime) || null
       };
       // CRITICAL: wipe any in-memory data from a previous user before loading
       state = _emptyState();
@@ -4319,7 +4383,7 @@ var _extratoPendingTx = null; // transações aguardando confirmação do usuár
 var _extratoLastCard = null;  // referência ao último card de resumo (p/ atualizar via comando)
 
 function openExtratoPicker(){
-  if(!isPremium){ openPremiumModal(); return; }
+  if(!podeUsarAssistente()){ openPremiumModal(); return; }
   // Orientação (mostra uma vez por sessão): OFX/CSV é melhor que PDF
   if(!_extratoDicaMostrada){
     _extratoDicaMostrada = true;
